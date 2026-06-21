@@ -1,0 +1,1000 @@
+/* ===========================================
+   LETTER BOOK PAGE BASE: MANDATORY STYLES
+   Include this ENTIRE file in every Frontend Textbooks HTML book.
+   Designed for US Letter PDF output: 8.5in x 11in.
+   =========================================== */
+
+/* 1. Print setup */
+@page {
+    size: letter;
+    margin: 0;
+}
+
+html {
+    background: var(--browser-bg, #d8d4cb);
+    color: var(--ink, #10131A);
+    font-family: var(--font-body, Georgia, serif);
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--browser-bg, #d8d4cb);
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video {
+    max-width: 100%;
+    height: auto;
+}
+
+/* 2. Screen viewing shell */
+.book-shell {
+    min-height: 100vh;
+    padding: 32px 0;
+}
+
+.book {
+    display: grid;
+    gap: 28px;
+    justify-content: center;
+}
+
+/* 3. Explicit designed pages */
+.page {
+    position: relative;
+    width: 8.5in;
+    min-height: 11in;
+    height: 11in;
+    overflow: hidden;
+    background: var(--page-bg, #fbfaf6);
+    color: var(--ink, #10131A);
+    box-shadow: 0 24px 70px rgba(20, 17, 12, 0.18);
+    break-before: page;
+    break-after: page;
+    break-inside: avoid;
+    page-break-before: always;
+    page-break-after: always;
+    page-break-inside: avoid;
+}
+
+.page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+}
+
+.page:first-child {
+    break-before: auto;
+    page-break-before: auto;
+}
+
+.page-inner {
+    position: relative;
+    height: 11in;
+    min-height: 11in;
+    padding: var(--page-margin-top, 0.72in)
+             var(--page-margin-outer, 0.74in)
+             var(--page-margin-bottom, 0.72in)
+             var(--page-margin-inner, 0.74in);
+}
+
+.page.cover,
+.page.title-page,
+.page.chapter-opener,
+.page.plate {
+    break-inside: avoid;
+}
+
+/* 4. Flowing chapter pages */
+.book-flow {
+    width: 8.5in;
+    margin: 0 auto;
+    background: var(--page-bg, #fbfaf6);
+    color: var(--ink, #10131A);
+    box-shadow: 0 24px 70px rgba(20, 17, 12, 0.18);
+}
+
+.chapter-flow {
+    padding: 0.82in 0.78in 0.82in;
+    break-before: page;
+    page-break-before: always;
+}
+
+.chapter-flow:first-child {
+    break-before: auto;
+    page-break-before: auto;
+}
+
+/* 5. Type defaults */
+h1,
+h2,
+h3,
+h4 {
+    font-family: var(--font-display, Georgia, serif);
+    line-height: 1.05;
+    color: var(--heading-ink, #0A3695);
+    margin: 0 0 0.25em;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+h1 {
+    font-size: var(--h1-size, 44pt);
+}
+
+h2 {
+    font-size: var(--h2-size, 25pt);
+    margin-top: 1.3em;
+}
+
+h3 {
+    font-size: var(--h3-size, 15pt);
+    margin-top: 1.1em;
+}
+
+p {
+    margin: 0 0 0.95em;
+    orphans: 3;
+    widows: 3;
+}
+
+p + p {
+    text-indent: var(--paragraph-indent, 1.1em);
+}
+
+.no-indent,
+.lede,
+blockquote p,
+figcaption,
+aside p,
+li p {
+    text-indent: 0;
+}
+
+.lede {
+    font-size: var(--lede-size, 15pt);
+    line-height: 1.45;
+    color: var(--muted-ink, #2C3342);
+}
+
+blockquote {
+    margin: 1.2em 0;
+    padding: 0.2em 0 0.2em 1em;
+    border-left: 3px solid var(--accent, #4F76D9);
+    color: var(--quote-ink, var(--heading-ink, #0A3695));
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+ul,
+ol {
+    margin: 0 0 1em 1.25em;
+    padding: 0;
+}
+
+li {
+    margin-bottom: 0.35em;
+}
+
+/* 6. Figures, diagrams, tables, and callouts */
+figure,
+.figure,
+.diagram,
+.plate,
+.callout,
+.layout-block,
+.no-split,
+table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+/* Editorial prose rhythm helpers */
+.flow-single {
+    max-width: 5.8in;
+}
+
+.flow-single-wide {
+    max-width: 6.8in;
+}
+
+.flow-two {
+    column-count: 2;
+    column-gap: var(--text-column-gap, 0.52in);
+}
+
+.flow-three {
+    column-count: 3;
+    column-gap: 0.22in;
+    font-size: 0.92em;
+    line-height: 1.48;
+}
+
+.flow-two h1,
+.flow-two h2,
+.flow-two h3,
+.flow-three h1,
+.flow-three h2,
+.flow-three h3,
+.flow-two figure,
+.flow-three figure,
+.flow-two .callout,
+.flow-three .callout {
+    break-inside: avoid;
+    break-after: avoid;
+    page-break-inside: avoid;
+    page-break-after: avoid;
+}
+
+.flow-two h1,
+.flow-three h1,
+.flow-two .span-all,
+.flow-three .span-all {
+    column-span: all;
+}
+
+.image-plate {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: 0.18in;
+}
+
+.image-plate img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Atomic text pages for editorial/coffee-table body prose.
+   Use these when the screen/PDF artifact must read as designed pages
+   rather than a web article printed into one wide column. */
+.text-page .page-inner {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: var(--text-page-header-gap, 0.2in);
+    padding: var(--text-page-margin-top, 0.78in)
+             var(--text-page-margin-outer, 0.86in)
+             var(--text-page-margin-bottom, 0.72in)
+             var(--text-page-margin-inner, 0.86in);
+    overflow: hidden;
+}
+
+.text-page-header {
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+.text-page-title {
+    margin: 0;
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
+.text-page-title::after {
+    content: "";
+    display: block;
+    width: var(--title-rule-width, 1.35in);
+    height: 2px;
+    margin-top: 0.16in;
+    background: var(--soft-accent, var(--rule, #9BB2EA));
+}
+
+.text-frame {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.text-single .text-frame {
+    max-width: 5.8in;
+}
+
+.text-two .text-frame {
+    column-count: 2;
+    column-gap: var(--text-column-gap, 0.52in);
+    column-rule: var(--text-column-rule, 0);
+}
+
+.text-three .text-frame {
+    column-count: 3;
+    column-gap: 0.22in;
+    font-size: 0.92em;
+    line-height: 1.48;
+}
+
+.text-frame h2,
+.text-frame h3,
+.text-frame figure,
+.text-frame .callout,
+.text-frame table,
+.text-frame ol,
+.text-frame ul,
+.text-frame blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.text-frame h2,
+.text-frame h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+.keep-with-next {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.text-frame .span-all {
+    column-span: all;
+}
+
+.text-frame > figure:not(.inline-figure),
+.text-frame > .diagram-card:not(.inline-figure),
+.text-frame > .comparison-diagram:not(.inline-figure),
+.text-frame > table:not(.inline-table) {
+    column-span: all;
+}
+
+figure {
+    margin: 1.4em 0;
+}
+
+.text-frame > figure:not(.inline-figure) {
+    margin: 0.04in 0 0.28in;
+}
+
+.text-stack .page-inner {
+    grid-template-rows: auto 1fr auto;
+}
+
+.text-stack .text-frame {
+    column-count: 1;
+    display: grid;
+    gap: var(--text-stack-row-gap, 0.34in);
+    align-content: start;
+}
+
+.text-stack-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--text-stack-column-gap, 0.52in);
+    padding-top: 0.2in;
+    border-top: 1px solid var(--rule, #9BB2EA);
+}
+
+.text-stack-row:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.text-stack-cell {
+    min-width: 0;
+}
+
+.text-stack-cell > :last-child {
+    margin-bottom: 0;
+}
+
+.text-stack-cell h2,
+.text-stack-cell h3 {
+    margin-top: 0;
+}
+
+.text-stack-anchor {
+    align-self: end;
+    display: grid;
+    grid-template-columns: 0.08in minmax(0, 1fr);
+    gap: 0.18in;
+    padding-top: 0.18in;
+}
+
+.text-stack-anchor::before {
+    content: "";
+    width: 0.08in;
+    min-height: 0.68in;
+    background: var(--accent, #4F76D9);
+}
+
+.stack-anchor-label {
+    margin: 0 0 0.06in;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--label-ink, #69738F);
+}
+
+.stack-anchor-note {
+    max-width: 4.9in;
+    margin: 0;
+    font-family: var(--font-display, Georgia, serif);
+    font-size: var(--stack-anchor-size, 15pt);
+    line-height: 1.25;
+    color: var(--heading-ink, #0A3695);
+}
+
+.text-tail .text-frame {
+    column-count: 1;
+    max-width: var(--tail-text-width, 4.9in);
+    font-size: var(--tail-body-size, 11.2pt);
+    line-height: var(--tail-body-line-height, 1.6);
+}
+
+.text-tail .page-inner {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.text-tail .tail-furniture {
+    align-self: end;
+    display: grid;
+    grid-template-columns: 0.08in minmax(0, 1fr);
+    gap: 0.18in;
+    align-items: start;
+}
+
+.text-tail .tail-furniture::before {
+    content: "";
+    width: 0.08in;
+    min-height: 0.86in;
+    background: var(--accent, #4F76D9);
+}
+
+.tail-label {
+    margin: 0 0 0.08in;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--label-ink, #69738F);
+}
+
+.tail-quote {
+    max-width: 5.2in;
+    margin: 0;
+    font-family: var(--font-display, Georgia, serif);
+    font-size: var(--tail-quote-size, 17pt);
+    line-height: 1.22;
+    color: var(--heading-ink, #0A3695);
+}
+
+.editorial-spread .page-inner,
+.premium-spread .page-inner {
+    padding: var(--spread-margin-top, 0.78in)
+             var(--spread-margin-outer, 0.78in)
+             var(--spread-margin-bottom, 0.72in)
+             var(--spread-margin-inner, 0.78in);
+}
+
+.spread-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.25in;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.spread-title {
+    max-width: var(--spread-title-width, 6.2in);
+    margin-top: var(--spread-title-top, 1.2in);
+    font-size: var(--spread-title-size, 46pt);
+    line-height: 0.98;
+}
+
+.spread-title::after {
+    content: "";
+    display: block;
+    width: 1.15in;
+    height: 1.5px;
+    margin-top: 0.24in;
+    background: var(--soft-accent, var(--rule, #9BB2EA));
+}
+
+.spread-left.text-led .page-inner {
+    display: grid;
+    grid-template-rows: auto 1fr;
+}
+
+.spread-left-body.text-led {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    align-content: start;
+    min-height: 0;
+    padding-top: var(--spread-title-top, 1.2in);
+}
+
+.spread-deck {
+    max-width: var(--spread-deck-width, 4.9in);
+    margin: 0.42in 0 0;
+    font-size: var(--spread-deck-size, 15pt);
+    line-height: 1.45;
+    color: var(--deck-ink, #19419A);
+    text-indent: 0;
+}
+
+.spread-figure {
+    margin: var(--spread-figure-top, 0.46in) 0 0;
+}
+
+.spread-figure svg,
+.spread-figure img {
+    width: 100%;
+    display: block;
+}
+
+.spread-right .page-inner {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: 0.5in;
+    padding-top: var(--spread-right-top, 1.28in);
+}
+
+.spread-columns {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spread-column-gap, 0.72in);
+    align-content: start;
+}
+
+.spread-columns h2 {
+    margin: 0 0 0.22in;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 9.2pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.spread-columns p {
+    font-size: var(--spread-body-size, 11pt);
+    line-height: var(--spread-body-line-height, 1.72);
+    text-indent: 0;
+}
+
+.spread-pullquote {
+    margin: 0;
+    padding: 0 0 0 0.22in;
+    border-left: 1.5px solid var(--accent, #4F76D9);
+    font-family: var(--font-display, Georgia, serif);
+    color: var(--heading-ink, #0A3695);
+}
+
+.spread-pullquote p {
+    margin: 0;
+    font-size: var(--spread-quote-size, 24pt);
+    line-height: 1.22;
+    text-indent: 0;
+}
+
+.sparse-feature .page-inner {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+}
+
+.sparse-feature .feature-columns.two {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--feature-sparse-gap, 0.5in);
+}
+
+.sparse-feature .feature-anchor {
+    align-self: end;
+    display: grid;
+    grid-template-columns: 1.2in minmax(0, 1fr);
+    gap: 0.32in;
+    padding-top: 0.24in;
+    border-top: 2px solid var(--accent, #4F76D9);
+}
+
+.sparse-feature .feature-anchor-number {
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 70pt;
+    font-weight: 800;
+    line-height: 0.82;
+    color: var(--accent, #4F76D9);
+}
+
+.sparse-feature .feature-anchor-note {
+    margin: 0;
+    font-size: 15pt;
+    line-height: 1.32;
+    color: var(--muted-ink, #2C3342);
+    text-indent: 0;
+}
+
+.diagram-card {
+    padding: var(--diagram-padding, 0.18in 0);
+    border: var(--diagram-border, 0);
+    background: var(--diagram-bg, transparent);
+}
+
+.generated-diagram-frame {
+    position: relative;
+    overflow: hidden;
+    background: var(--diagram-bg, transparent);
+}
+
+.generated-diagram-frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.diagram-overlay {
+    position: absolute;
+    max-width: 1.8in;
+    padding: 0.06in 0.08in;
+    background: color-mix(in srgb, var(--page-bg, #fbfaf6) 92%, transparent);
+    border: 1px solid var(--rule, #9BB2EA);
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: var(--diagram-overlay-size, 8.2pt);
+    font-weight: 700;
+    line-height: 1.18;
+    color: var(--ink, #10131A);
+    text-indent: 0;
+}
+
+.comparison-diagram {
+    --comparison-dark-bg: var(--ink, #10131A);
+    --comparison-dark-ink: var(--page-bg, #fbfaf6);
+    --comparison-light-bg: color-mix(in srgb, var(--page-bg, #fbfaf6) 88%, white);
+    --comparison-row-border: color-mix(in srgb, var(--rule, #9BB2EA) 78%, var(--ink, #10131A));
+    margin: 0;
+    padding: var(--comparison-padding, 0.26in);
+    border: 1px solid var(--rule, #9BB2EA);
+    background: var(--comparison-bg, transparent);
+}
+
+.comparison-title {
+    margin: 0 0 0.22in;
+    padding-bottom: 0.16in;
+    border-bottom: 1px solid var(--rule, #9BB2EA);
+    font-family: var(--font-display, Georgia, serif);
+    font-size: var(--comparison-title-size, 15pt);
+    line-height: 1.16;
+    text-align: center;
+}
+
+.comparison-map {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 0.52in minmax(0, 1fr);
+    gap: 0.08in 0.12in;
+    align-items: stretch;
+}
+
+.comparison-head,
+.comparison-cell {
+    display: flex;
+    align-items: center;
+    min-height: 0.42in;
+    padding: 0.11in 0.14in;
+    border: 1px solid var(--comparison-row-border);
+    background: var(--comparison-light-bg);
+}
+
+.comparison-head {
+    justify-content: center;
+    min-height: 0.48in;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 8.3pt;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--label-ink, #69738F);
+}
+
+.comparison-head.is-dark,
+.comparison-cell.is-dark {
+    border-color: var(--comparison-dark-bg);
+    background: var(--comparison-dark-bg);
+    color: var(--comparison-dark-ink);
+}
+
+.comparison-cell {
+    justify-content: flex-start;
+    gap: 0.1in;
+    font-size: var(--comparison-cell-size, 9.2pt);
+    font-weight: 700;
+    line-height: 1.22;
+}
+
+.comparison-icon {
+    flex: 0 0 var(--comparison-icon-size, 0.25in);
+    width: var(--comparison-icon-size, 0.25in);
+    height: var(--comparison-icon-size, 0.25in);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.comparison-connector {
+    position: relative;
+    min-height: 0.42in;
+}
+
+.comparison-connector::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    border-top: 1.5px solid var(--accent, #4F76D9);
+}
+
+.comparison-checkpoint {
+    display: grid;
+    place-items: center;
+    width: var(--comparison-checkpoint-size, 1.18in);
+    min-height: var(--comparison-checkpoint-size, 1.18in);
+    margin: 0.28in auto 0;
+    border-radius: 999px;
+    background: var(--accent, #4F76D9);
+    color: white;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 8.2pt;
+    font-weight: 800;
+    line-height: 1.35;
+    letter-spacing: 0.06em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+figcaption {
+    margin-top: 0.55em;
+    font-size: 8.5pt;
+    line-height: 1.35;
+    color: var(--muted-ink, #2C3342);
+}
+
+.figure-number {
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--label-ink, #69738F);
+}
+
+.callout {
+    margin: 1.2em 0;
+    padding: 0.22in;
+    background: var(--callout-bg, #f2f4fa);
+    border: 1px solid var(--rule, #9BB2EA);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2em 0;
+    font-size: 9.5pt;
+}
+
+th,
+td {
+    padding: 0.55em 0.65em;
+    border-bottom: 1px solid var(--rule, #9BB2EA);
+    vertical-align: top;
+}
+
+th {
+    text-align: left;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 8pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--label-ink, #69738F);
+}
+
+/* 7. Running furniture */
+.running-head,
+.page-number {
+    position: absolute;
+    font-family: var(--font-ui, var(--font-body, Georgia, serif));
+    font-size: 8pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--running-ink, #69738F);
+}
+
+.running-head {
+    top: 0.34in;
+    left: var(--page-margin-inner, 0.74in);
+    right: var(--page-margin-outer, 0.74in);
+}
+
+.page-number {
+    bottom: 0.34in;
+    right: var(--page-margin-outer, 0.74in);
+}
+
+/* 8. Browser-only controls */
+.screen-only {
+    display: block;
+}
+
+.print-only {
+    display: none;
+}
+
+.book-controls {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    padding: 12px;
+    background: color-mix(in srgb, var(--browser-bg, #d8d4cb) 92%, transparent);
+    backdrop-filter: blur(10px);
+}
+
+.book-controls button {
+    font: 600 13px/1 var(--font-ui, sans-serif);
+    border: 1px solid var(--rule, #9BB2EA);
+    border-radius: 6px;
+    padding: 9px 12px;
+    color: var(--ink, #10131A);
+    background: var(--page-bg, #fbfaf6);
+    cursor: pointer;
+}
+
+/* 9. Print behavior */
+@media print {
+    html,
+    body {
+        width: 8.5in;
+        min-height: 11in;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .book-shell,
+    .book,
+    .book-flow {
+        display: block;
+        width: auto;
+        min-height: auto;
+        padding: 0;
+        margin: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+        .page {
+            width: 8.5in;
+            min-height: 11in;
+            height: 11in;
+            margin: 0;
+            box-shadow: none;
+            overflow: hidden;
+        }
+
+        .page-inner {
+            height: 11in;
+            min-height: 11in;
+        }
+
+    .chapter-flow {
+        padding: 0.82in 0.78in 0.82in;
+    }
+
+    .screen-only,
+    .book-controls {
+        display: none !important;
+    }
+
+    .print-only {
+        display: block;
+    }
+}
+
+/* 10. Smaller browser preview */
+@media screen and (max-width: 920px) {
+    .book-shell {
+        padding: 16px 0;
+    }
+
+        .page,
+        .book-flow {
+            width: min(100vw - 24px, 8.5in);
+            min-height: calc((min(100vw - 24px, 8.5in)) * 11 / 8.5);
+            height: auto;
+        }
+
+        .page-inner {
+            min-height: calc((min(100vw - 24px, 8.5in)) * 11 / 8.5);
+            height: auto;
+            padding: 8.5%;
+        }
+
+        .text-page .page-inner {
+            display: block;
+            min-height: 0;
+            padding-bottom: 0;
+            overflow: visible;
+        }
+
+        .text-page {
+            min-height: 0;
+            height: auto;
+            box-shadow: none;
+            break-before: auto;
+            break-after: auto;
+            page-break-before: auto;
+            page-break-after: auto;
+        }
+
+        .text-page + .text-page .page-inner {
+            padding-top: 0;
+        }
+
+        .text-page + .text-page .text-page-header {
+            display: none;
+        }
+
+        .text-frame,
+        .text-two .text-frame,
+        .text-three .text-frame,
+        .text-stack .text-frame {
+            column-count: 1;
+            column-rule: 0;
+            overflow: visible;
+        }
+
+        .text-stack-row,
+        .text-stack-anchor,
+        .comparison-map {
+            grid-template-columns: 1fr;
+        }
+
+        .comparison-connector {
+            display: none;
+        }
+
+        .comparison-diagram {
+            padding: 6%;
+        }
+
+        .text-stack-anchor::before {
+            min-height: 0.08in;
+            width: 0.92in;
+        }
+
+        .text-tail .tail-furniture {
+            position: static;
+            margin-top: 14%;
+        }
+
+        .sparse-feature .feature-columns.two,
+        .sparse-feature .feature-anchor {
+            grid-template-columns: 1fr;
+        }
+}
+
+/* 11. Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+        scroll-behavior: auto !important;
+    }
+}

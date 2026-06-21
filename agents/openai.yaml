@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Textbooks"
+  short_description: "Turn manuscripts into HTML books and PDFs"
+  default_prompt: "Use $frontend-textbooks to turn my manuscript into a designed Letter-size HTML book and PDF."
