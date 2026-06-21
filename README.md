@@ -18,6 +18,21 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 - **Reusable Scaffold** - Includes a Markdown-to-book scaffold with cover options, browser-side pagination, chapter-close furniture, generated part images, mobile collapse behavior, and overflow assertions.
 - **Verification Scripts** - Provides Playwright-backed rendered-state checks for page count, text-frame overflow, tail-furniture overlap, screenshots, and readiness-gated PDF export.
 
+## Example Output
+
+These pages were rendered from an example PDF generated with the skill. The same workflow can produce textbook-style manuals, editorial field guides, and coffee-table-style books with image-led section pacing.
+
+<p>
+  <img src="examples/walking-in-cover.png" width="220" alt="Example generated book cover">
+  <img src="examples/walking-in-part-divider.png" width="220" alt="Example image-led part divider page">
+  <img src="examples/walking-in-canvas.png" width="220" alt="Example framework canvas page">
+  <img src="examples/walking-in-checklist.png" width="220" alt="Example two-column textbook page with a checklist">
+</p>
+
+## Why Codex Is Recommended
+
+Codex is highly recommended for this skill because it can combine file editing, shell scripts, browser/PDF verification, and image generation in one workflow. That matters for book production: the best results often need generated cover art, section-divider images, visual plates, and manuscript-grounded editorial illustrations, then a rendered PDF pass to confirm those assets actually print cleanly.
+
 ## Installation
 
 ### Codex Manual Installation
@@ -74,57 +89,6 @@ The skill will:
 5. Export a PDF from the same HTML.
 6. Verify page integrity, overflow, text preservation, generated assets, and mobile readability.
 
-### Use the Scaffold Directly
-
-For mostly Markdown prose, the scaffold can create a strong first draft:
-
-```bash
-node scripts/build-html-book.mjs book.json manuscript.md
-```
-
-Minimal `book.json`:
-
-```json
-{
-  "title": "Walking In",
-  "subtitle": "A field guide to being prepared for your day",
-  "author": "Your Name",
-  "outputDir": "dist/walking-in",
-  "coverImage": "assets/cover-art.png",
-  "style": "default"
-}
-```
-
-Useful optional fields include:
-
-- `coverBandHeight`
-- `coverKicker`
-- `bookType`
-- `bodyColumns`
-- `chapterClosers`
-- `partImages`
-
-### Export and Verify
-
-Use the standard PDF exporter:
-
-```bash
-bash scripts/export-pdf.sh dist/walking-in/index.html dist/walking-in/walking-in.pdf
-```
-
-For books with browser-side pagination, generated images, or readiness-sensitive assets, use the readiness-gated path:
-
-```bash
-bash scripts/export-ready-pdf.sh dist/walking-in/index.html dist/walking-in/walking-in.pdf --no-open
-```
-
-Verify the rendered book:
-
-```bash
-bash scripts/verify-rendered-book.sh dist/walking-in/index.html
-bash scripts/inspect-pdf.sh dist/walking-in/walking-in.pdf
-```
-
 ## Included Styles
 
 The default style is a cobalt editorial system:
@@ -178,4 +142,4 @@ Inspired by [Zara Zhang's `frontend-slides`](https://github.com/zarazhangrui/fro
 
 ## License
 
-MIT License, matching the license used by [`zarazhangrui/frontend-slides`](https://github.com/zarazhangrui/frontend-slides).
+This project is available under the MIT License.
