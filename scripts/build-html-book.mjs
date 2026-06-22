@@ -54,7 +54,7 @@ book.json fields:
                with the default band, split-cover art slot is ${LETTER_WIDTH_IN}in x ${(LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN).toFixed(2)}in, aspect ${(LETTER_WIDTH_IN / (LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN)).toFixed(2)}:1
   coverBandHeight optional inches for the bottom cover band, default 3.55
   chapterClosers optional object keyed by chapter id, title, or number for generated chapter-close copy
-  partImages   optional object keyed by part id, title, label, or number for generated part-divider art; values must be unique per part
+  partImages   optional object keyed by part id, title, label, or number for generated part-divider art; if provided, must cover every part and use unique values
   style         optional: ${STYLE_NAMES.join(" | ")}
   bodyColumns   optional: ${BODY_COLUMN_CLASSES.join(" | ")}, default: text-two
 `);
@@ -145,6 +145,10 @@ function lookupMap(map, keys) {
     if (value) return value;
   }
   return "";
+}
+
+function hasMapEntries(map) {
+  return Object.keys(map).length > 0;
 }
 
 function clipText(value, maxLength = 160) {
@@ -320,6 +324,18 @@ function assertUniquePartImages(parts) {
   }
 }
 
+function assertCompletePartImages(parts, partImages) {
+  if (!hasMapEntries(partImages)) return;
+  if (!parts.length) {
+    throw new Error("partImages were provided, but the manuscript has no parsed part dividers.");
+  }
+  const missing = parts.filter((part) => !part.image);
+  if (missing.length) {
+    const names = missing.map(partDisplayName).join("; ");
+    throw new Error(`partImages must cover every parsed part divider when used. Missing image asset(s) for: ${names}. Generate section-grounded art for each part, using the same cover-image format and prompt style with distinct subjects.`);
+  }
+}
+
 function sourceTailText(chapter) {
   const sample = plainText(firstParagraph(chapter)) || chapter.title;
   return sample.split(/(?<=[.!?])\s+/).find((part) => part.length > 48) || chapter.title;
@@ -329,6 +345,7 @@ parsed.parts.forEach((part, index) => {
   const image = lookupMap(configMaps.partImages, partLookupKeys(part, index));
   if (image) part.image = image;
 });
+assertCompletePartImages(parsed.parts, configMaps.partImages);
 assertUniquePartImages(parsed.parts);
 const partNumbers = new Map(parsed.parts.map((part, index) => [part.id, index + 1]));
 
@@ -422,13 +439,14 @@ body { font-size: 10.7pt; }
 .part-divider .page-inner { display: grid; grid-template-rows: auto auto 1fr auto; padding: 0.82in; background: linear-gradient(135deg, color-mix(in srgb, var(--steel) 10%, transparent), transparent 42%), var(--page-bg); }
 .part-divider h1 { max-width: 6.2in; margin-top: 1.5in; font-size: 50pt; line-height: 0.96; }
 .part-number { align-self: end; font-family: var(--font-ui); font-size: 104pt; font-weight: 900; line-height: 0.8; color: color-mix(in srgb, var(--accent) 16%, transparent); }
-.part-divider.has-part-image .page-inner { grid-template-rows: minmax(0, 1fr) auto; gap: 0.34in; padding: 0.7in; background: var(--page-bg); }
+.part-divider.has-part-image { background: var(--cover-band, var(--heading-ink)); }
+.part-divider.has-part-image .page-inner { display: grid; grid-template-rows: var(--cover-art-height) var(--cover-band-height); gap: 0; padding: 0; background: var(--cover-band, var(--heading-ink)); }
 .part-image-frame { min-height: 0; margin: 0; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, var(--soft-accent) 24%, var(--page-bg)), var(--page-bg)); }
 .part-image-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.part-divider-copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.3in; align-items: end; }
-.part-divider-copy .part-label { grid-column: 1 / -1; margin: 0; color: var(--accent); }
-.part-divider.has-part-image h1 { max-width: 5.6in; margin: 0; font-size: 34pt; }
-.part-divider.has-part-image .part-number { font-size: 74pt; }
+.part-divider-copy { min-height: var(--cover-band-height); display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 0.1in 0.3in; align-content: center; align-items: end; padding: 0.48in 0.62in 0.56in; background: var(--cover-band, var(--heading-ink)); color: #fff; }
+.part-divider-copy .part-label { grid-column: 1 / -1; margin: 0; color: #fff; }
+.part-divider.has-part-image h1 { max-width: 5.9in; margin: 0; font-size: 38pt; line-height: 0.96; color: #fff; }
+.part-divider.has-part-image .part-number { font-size: 74pt; color: color-mix(in srgb, #fff 20%, transparent); }
 .chapter-opener .page-inner { display: grid; grid-template-rows: auto 1fr auto auto; }
 .chapter-title { align-self: end; max-width: 6.2in; font-size: 44pt; }
 .chapter-summary { max-width: 5.7in; margin-top: 0.22in; font-family: var(--font-ui); font-size: 12pt; line-height: 1.45; color: var(--deck-ink); }
@@ -463,7 +481,8 @@ body { font-size: 10.7pt; }
   .page { margin-bottom: 18px; }
   .text-page { margin-bottom: 0; }
   .cover .page-inner, .route-photo .page-inner { position: relative; height: auto; min-height: 0; }
-  .cover-image, .route-photo-image { position: relative; display: block; min-height: 72vw; inset: auto; }
+  .part-divider.has-part-image .page-inner { height: auto; min-height: 0; grid-template-rows: auto auto; }
+  .cover-image, .route-photo-image, .part-image-frame { position: relative; display: block; min-height: 72vw; inset: auto; }
   .cover-title, .title-grid h1, .part-divider h1, .chapter-title, .option-cover h1 { font-size: 38pt; }
 }`;
 }
