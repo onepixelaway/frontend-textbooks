@@ -54,7 +54,7 @@ book.json fields:
                with the default band, split-cover art slot is ${LETTER_WIDTH_IN}in x ${(LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN).toFixed(2)}in, aspect ${(LETTER_WIDTH_IN / (LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN)).toFixed(2)}:1
   coverBandHeight optional inches for the bottom cover band, default 3.55
   chapterClosers optional object keyed by chapter id, title, or number for generated chapter-close copy
-  partImages   optional object keyed by part id, title, label, or number for generated part-divider art
+  partImages   optional object keyed by part id, title, label, or number for generated part-divider art; values must be unique per part
   style         optional: ${STYLE_NAMES.join(" | ")}
   bodyColumns   optional: ${BODY_COLUMN_CLASSES.join(" | ")}, default: text-two
 `);
@@ -304,6 +304,22 @@ function partLookupKeys(part, index) {
   return [part.id, part.title, part.label, String(index + 1), `part-${String(index + 1).padStart(2, "0")}`];
 }
 
+function partDisplayName(part) {
+  return [part.label, part.title].filter(Boolean).join(": ") || part.id;
+}
+
+function assertUniquePartImages(parts) {
+  const seen = new Map();
+  for (const part of parts) {
+    if (!part.image) continue;
+    const previous = seen.get(part.image);
+    if (previous) {
+      throw new Error(`partImages must use a distinct image asset for each part divider. "${part.image}" is assigned to both "${partDisplayName(previous)}" and "${partDisplayName(part)}". Generate separate section-grounded images or distinct variants.`);
+    }
+    seen.set(part.image, part);
+  }
+}
+
 function sourceTailText(chapter) {
   const sample = plainText(firstParagraph(chapter)) || chapter.title;
   return sample.split(/(?<=[.!?])\s+/).find((part) => part.length > 48) || chapter.title;
@@ -313,6 +329,7 @@ parsed.parts.forEach((part, index) => {
   const image = lookupMap(configMaps.partImages, partLookupKeys(part, index));
   if (image) part.image = image;
 });
+assertUniquePartImages(parsed.parts);
 const partNumbers = new Map(parsed.parts.map((part, index) => [part.id, index + 1]));
 
 for (const chapter of parsed.chapters) {
