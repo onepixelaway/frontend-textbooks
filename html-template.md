@@ -144,33 +144,6 @@ For a single-file book with no external images, `[book-title].html` next to `[bo
       color: var(--accent);
     }
 
-    .chapter-opener .page-inner {
-      display: grid;
-      align-content: center;
-      gap: 0.2in;
-    }
-
-    .chapter-number {
-      font-family: var(--font-ui);
-      font-size: 9pt;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--accent);
-    }
-
-    .chapter-title {
-      max-width: 6.1in;
-      font-size: 42pt;
-    }
-
-    .chapter-summary {
-      max-width: 5.7in;
-      font-size: 13.5pt;
-      line-height: 1.45;
-      color: var(--muted-ink);
-      text-indent: 0;
-    }
-
     .diagram-card {
       padding: 0.18in 0;
       border: 0;
@@ -230,11 +203,15 @@ For a single-file book with no external images, `[book-title].html` next to `[bo
         </div>
       </section>
 
-      <section class="page chapter-opener" aria-label="Chapter 1 opener">
+      <section class="page text-page text-two" aria-label="Chapter 1">
         <div class="page-inner">
-          <p class="chapter-number no-indent">Chapter 1</p>
-          <h1 class="chapter-title">Chapter Title</h1>
-          <p class="chapter-summary">Use a short source-faithful excerpt or orientation paragraph. Do not replace the chapter text with this summary.</p>
+          <header class="text-page-header">
+            <p class="chapter-kicker no-indent">Chapter 1</p>
+            <h1 class="text-page-title">Chapter Title</h1>
+          </header>
+          <div class="text-frame">
+            <p>The opening manuscript prose starts on the same page as the chapter title.</p>
+          </div>
           <div class="page-number">3</div>
         </div>
       </section>
@@ -378,7 +355,7 @@ Required CSS behavior:
 }
 ```
 
-If a part divider, plate, or chapter opener appears partly on one page and leaves a blank remainder on the next page, the export is not acceptable. Fix the structure or CSS and re-export.
+If a part divider, plate, figure page, or other fixed-format page appears partly on one page and leaves a blank remainder on the next page, the export is not acceptable. Fix the structure or CSS and re-export.
 
 ## Editorial Rhythm
 
@@ -387,99 +364,72 @@ For editorial and coffee-table books, choose a deliberate mix:
 - `.page.text-page.text-single` for quiet, spacious narrative pages.
 - `.page.text-page.text-two` for dense analytical chapters and business essay sections.
 - `.page.text-page.text-three` for compact taxonomies, checklists, and field-guide material.
+- `.page.text-page.text-short-single` for short final prose pages, roughly under 1,300 characters, where two columns would leave stranded text and blank space.
 - `.page.text-page.text-stack` for medium-short continuation pages or compact tool pages where two stacked bands of small columns feel more intentional than a normal half-empty two-column page.
+- `.sparse-item-rows` inside an atomic tool/canvas page for 4-6 short items where equal columns would create tall empty lanes.
 - `.page.image-plate` or image-backed part pages for visual pacing.
 
 Do not use multi-column text as decoration. Use it where the manuscript's structure supports scanning, comparison, or short modular ideas.
+
+For field tools, canvases, or frameworks with 4-6 items and only a sentence or two per item, do not use equal-width vertical columns. Use rows with larger item headers and short explanatory copy so the white space reads as a designed list rather than empty column height.
+
+Do not add visible continuation labels such as `continued`, `text`, or `<span class="continuation-mark">...</span>` to repeated text-page titles. Use the same title, a quieter running header, or an `aria-label` for continuation semantics; the visible page should never show a stray continuation word beside the title.
+
+Cover art is not an interior plate by default. Do not add a standalone frontispiece/opening plate that simply repeats the cover image after the table of contents. If the book needs an opening plate, generate or place a distinct manuscript-grounded asset for that page.
+
+Every major part or section divider should have its own generated or supplied image asset unless the user explicitly requested a plain/no-image edition or image generation is unavailable. Use the same split format as the default cover when using the default style: upper artwork field, solid cobalt text band, matching aspect ratio, and a distinct section-grounded subject.
 
 For executive, HBR-like, or coffee-table pages, two columns should still feel spacious. Favor 0.82in+ side margins, a 0.5in+ gutter, no center rule by default, and short accent rules over full-width decorative lines. Important figures, diagrams, and tables should span the text frame (`column-span: all`) unless explicitly marked as `.inline-figure` or `.inline-table`.
 
 Important PDF caveat: do not apply CSS multi-column layout to long flowing chapters unless you render and inspect continuation pages. Browser PDF engines can fragment long multi-column flows with clipped top text or large blank lower halves. For editorial book rhythm, bounded atomic feature pages are usually safer than multi-column chapter flows.
 
-## Editorial Chapter Opening Spreads
+## Chapter Starts
 
-For important chapters in editorial, HBR-like, coffee-table, business, and visually led instructional books, use a two-page opening spread when a single page would cram title, diagram, caption, and body text together. Do the same for important text-led chapters that would otherwise start as a dense title-plus-body page.
+For editorial, HBR-like, coffee-table, business, and visually led instructional books, the chapter start should begin the reading rather than delay it. Do not create two-page opening spreads or standalone title/deck opener pages by default. The next page after a part/section divider should usually be a `.text-page` that contains chapter metadata, the chapter title, and the opening manuscript prose.
 
 Pattern:
 
 ```html
-<section class="page editorial-spread spread-left" aria-label="Chapter opening left page">
+<section class="page text-page text-two" aria-label="Chapter 6">
   <div class="page-inner">
-    <header class="spread-meta">
-      <p class="chapter-kicker no-indent">Chapter 6</p>
-      <p class="part-label no-indent">Part III</p>
+    <header class="text-page-header">
+      <p class="chapter-kicker no-indent">Chapter 6 <span>Part III</span></p>
+      <h1 class="text-page-title">Before: Building the Model and Setting the Table</h1>
+      <p class="chapter-deck no-indent">A short source-faithful deck may sit here when it helps orient the page.</p>
     </header>
-    <h1 class="spread-title">Before: Building the Model and Setting the Table</h1>
-    <figure class="spread-figure">
-      <!-- preserve the chapter diagram here, with more space than a normal body page -->
-      <svg viewBox="0 0 620 280" role="img" aria-label="Diagram title"></svg>
-      <figcaption><span class="figure-number">Figure 6.1</span> Small refined caption grounded in the manuscript.</figcaption>
-    </figure>
-  </div>
-</section>
-
-<section class="page editorial-spread spread-right" aria-label="Chapter opening right page">
-  <div class="page-inner">
-    <div class="spread-columns">
-      <section>
-        <h2>Output and Floor</h2>
-        <p>Reduced source-faithful excerpt, not the whole chapter.</p>
-      </section>
-      <section>
-        <h2>Model the People</h2>
-        <p>Reduced source-faithful excerpt, not the whole chapter.</p>
-      </section>
+    <div class="text-frame">
+      <p>The first manuscript paragraph starts here, on the same page as the title.</p>
+      <p>Continue the chapter prose normally. Do not insert a separate opener page before this body page.</p>
     </div>
-    <blockquote class="spread-pullquote">
-      <p>By the time a good operator walks into an important meeting, the meeting is mostly already over.</p>
-    </blockquote>
   </div>
 </section>
 ```
 
-Text-led variant for chapters without a figure:
+If a chapter needs an opening figure, place it in the body flow:
 
 ```html
-<section class="page editorial-spread spread-left text-led" aria-label="Chapter opening left page">
+<section class="page text-page text-two" aria-label="Chapter 6">
   <div class="page-inner">
-    <header class="spread-meta">
-      <p class="chapter-kicker no-indent">Chapter 7</p>
-      <p class="part-label no-indent">Part III</p>
+    <header class="text-page-header">
+      <p class="chapter-kicker no-indent">Chapter 6 <span>Part III</span></p>
+      <h1 class="text-page-title">Before: Building the Model and Setting the Table</h1>
     </header>
-    <div class="spread-left-body text-led">
-      <h1 class="spread-title">During: Sensing, Steering, and Staying Present</h1>
-      <p class="spread-deck no-indent">A short source-faithful deck or thesis from the chapter opening.</p>
+    <div class="text-frame">
+      <figure class="span-all">
+        <svg viewBox="0 0 620 240" role="img" aria-label="Diagram title"></svg>
+        <figcaption><span class="figure-number">Figure 6.1</span> Caption grounded in the manuscript.</figcaption>
+      </figure>
+      <p>The first manuscript paragraph follows the figure on the same prose page.</p>
     </div>
-  </div>
-</section>
-
-<section class="page editorial-spread spread-right" aria-label="Chapter opening right page">
-  <div class="page-inner">
-    <div class="spread-columns">
-      <section>
-        <h2>Opening</h2>
-        <p>Reduced source-faithful excerpt, not the whole chapter.</p>
-      </section>
-      <section>
-        <h2>First Major Move</h2>
-        <p>Reduced source-faithful excerpt from the next natural section.</p>
-      </section>
-    </div>
-    <blockquote class="spread-pullquote">
-      <p>Use a strong sentence already present in the manuscript.</p>
-    </blockquote>
   </div>
 </section>
 ```
 
 Design rules:
 
-- Add large top padding before the title and place the title lower than normal chapter heads.
-- Preserve the diagram when one exists, but give it more space and keep the caption small and refined. When no diagram exists, do not leave the chapter start as a dense body page; use a text-led deck/thesis and negative space.
-- Use the right page for an excerpt, usually 40-60% of what would have been on the dense single page; continue the remaining manuscript afterward.
-- Use airy line spacing and a wide gutter on the right page. Avoid center rules unless the style needs them.
-- Add one large pull quote at the bottom when the source contains a strong sentence.
-- After an opening spread, resume the full manuscript on the next page with a quiet continuation header instead of repeating the same full-size chapter title.
+- Use title hierarchy, a small deck, a source-faithful pull quote, or an in-flow figure to make the first body page feel composed.
+- Do not use `.chapter-opener`, `.editorial-spread`, `.spread-left`, or `.spread-right` unless the user explicitly requests chapter-opening spreads.
+- If the user explicitly requests chapter-opening spreads, mark the spread pages with `data-allow-opening-spread="true"` so verification can distinguish intentional spreads from accidental filler.
 - The default cobalt editorial palette fits intellectual business and field-guide prompts; adapt the palette only when the brief calls for a different aesthetic.
 
 ## Signature Interior Tool Pages
@@ -665,8 +615,9 @@ Required behavior:
 2. Append manuscript blocks into `.text-frame` until it fits.
 3. If `textFrame.scrollHeight > textFrame.clientHeight`, remove the last block, start a new `.text-page`, and append the block there.
 4. Repeat until the chapter is fully preserved.
-5. Before export, assert that every `.text-frame` fits vertically and horizontally. Hidden column overflow can appear as `scrollWidth > clientWidth`, not just excess height.
-6. Treat headings plus their following paragraph/list as a keep-with-next unit before measuring, so a page never ends with a stranded heading.
+5. If the final text page has simple prose under roughly 1,300 characters, add `.text-short-single` so the frame becomes one left-aligned column about 1.3x the usual single-column measure.
+6. Before export, assert that every `.text-frame` fits vertically and horizontally. Hidden column overflow can appear as `scrollWidth > clientWidth`, not just excess height.
+7. Treat headings plus their following paragraph/list as a keep-with-next unit before measuring, so a page never ends with a stranded heading.
 
 Minimal browser-side paginator pattern:
 
@@ -742,6 +693,73 @@ Minimal browser-side paginator pattern:
 
 Mobile rule: the base CSS collapses `.text-two` and `.text-three` to one column under 920px, removes internal text-frame overflow, and collapses consecutive `.text-page` sheets into a continuous reader. Do not override that with fixed desktop scaling; mobile HTML must read as a continuous article, not as shrunken Letter pages with gutters cutting through prose.
 
+## Sparse Item Rows
+
+Use `.sparse-item-rows` for compact canvas/tool pages with 4-6 short items. This is the default fix for pages where five equal columns would create tall empty lanes. Each row should have a larger header and a concise explanation, with any closing note or field prompt placed in a bottom anchor that reserves real layout space.
+
+Pattern:
+
+```html
+<section class="page sparse-feature" aria-label="Meeting canvas">
+  <div class="page-inner">
+    <header>
+      <p class="chapter-kicker no-indent">Reusable field tool</p>
+      <h1>The Meeting Canvas</h1>
+      <p class="lede no-indent">Before any meeting that matters, sketch the five parts.</p>
+    </header>
+    <div class="sparse-item-rows" role="list">
+      <section role="listitem">
+        <h3>People</h3>
+        <p>Who is really in the room, what each wants, and who quietly holds the pen?</p>
+      </section>
+      <section role="listitem">
+        <h3>Current State</h3>
+        <p>What does the room already know, believe, feel, or avoid saying out loud?</p>
+      </section>
+      <section role="listitem">
+        <h3>Movement</h3>
+        <p>Where will the conversation speed up, stall, fork, or defer?</p>
+      </section>
+      <section role="listitem">
+        <h3>Outcome</h3>
+        <p>What must be true when you leave, and what is the floor if it does not all go your way?</p>
+      </section>
+      <section role="listitem">
+        <h3>Setting</h3>
+        <p>What about time, sequence, mood, pressure, or audience will shape the room?</p>
+      </section>
+    </div>
+    <aside class="feature-anchor" aria-hidden="true">
+      <div class="feature-anchor-number">05</div>
+      <p class="feature-anchor-note no-indent">A short source-faithful field note that claims the lower page.</p>
+    </aside>
+  </div>
+</section>
+```
+
+Use rows when the item count is small and the copy is brief. Use columns only when each column has enough text or substructure to occupy its height intentionally.
+
+## Short Single-Column Pages
+
+Use `.text-short-single` when the final continuation page has simple prose under roughly 1,300 characters. Keep the page left aligned, not centered, and let the text frame use `--short-single-width` (about 1.3x the normal single-column measure, capped by the page frame). This is the default fix for pages where two columns would leave a few short lines and a large empty lower half.
+
+Pattern:
+
+```html
+<section class="page text-page text-two text-short-single continuation" aria-label="Chapter continued">
+  <div class="page-inner">
+    <header class="text-page-header">
+      <p class="chapter-kicker no-indent">Chapter 4 <span>Part II</span></p>
+      <h1 class="text-page-title">What Being Ready Means</h1>
+    </header>
+    <div class="text-frame">
+      <p>Short final source paragraph, set as one wider left-aligned measure.</p>
+      <p>Use this instead of leaving the text split into two sparse columns.</p>
+    </div>
+  </div>
+</section>
+```
+
 ## Stacked Mini-Column Pages
 
 Use `.text-stack` when a continuation or tool page has enough material to deserve structure, but not enough to fill a normal two-column reading page. The page should read in bands: top-left to top-right, then second row. Keep the row count small, and use the bottom anchor to make the empty space feel chosen.
@@ -753,7 +771,7 @@ Pattern:
   <div class="page-inner">
     <header class="text-page-header">
       <p class="chapter-kicker no-indent">Chapter 2 <span>Part I</span></p>
-      <h1 class="text-page-title">A Meeting Is a System <span class="continuation-mark">continued</span></h1>
+      <h1 class="text-page-title">A Meeting Is a System</h1>
     </header>
     <div class="text-frame">
       <div class="text-stack-row">
@@ -794,7 +812,7 @@ Pattern:
   <div class="page-inner">
     <header class="text-page-header">
       <p class="chapter-kicker no-indent">Chapter 8 <span>Part III</span></p>
-      <h1 class="text-page-title">After: Closing the Loop <span class="continuation-mark">continued</span></h1>
+      <h1 class="text-page-title">After: Closing the Loop</h1>
     </header>
     <div class="text-frame">
       <p>Short final source paragraph or two, set as a composed single column.</p>

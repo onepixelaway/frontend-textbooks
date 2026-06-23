@@ -13,7 +13,7 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 - **Print-Ready PDF Output** - Exports US Letter PDFs with page-safe CSS, printed backgrounds, and fixed-format designed pages.
 - **HTML First** - Produces a browser-readable HTML book before exporting the PDF, so the artifact stays inspectable and editable.
 - **Manuscript Preservation** - Defaults to preserving at least 90% of the source text instead of summarizing chapters away.
-- **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, chapter openers, two-column reading pages, visual plates, model cards, diagrams, and chapter closers.
+- **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, two-column reading pages, visual plates, model cards, diagrams, and chapter closers.
 - **Coffee-Table Feel When Appropriate** - Encourages image-led section dividers, spacious editorial pages, generated artwork, and strong cover routes when the manuscript calls for a more collectible book.
 - **Reusable Scaffold** - Includes a Markdown-to-book scaffold with cover options, browser-side pagination, chapter-close furniture, generated part images, mobile collapse behavior, and overflow assertions.
 - **Verification Scripts** - Provides Playwright-backed rendered-state checks for page count, text-frame overflow, tail-furniture overlap, screenshots, and readiness-gated PDF export.

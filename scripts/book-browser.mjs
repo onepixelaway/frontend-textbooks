@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { chromium } from "playwright";
 
+const SHORT_SINGLE_CHAR_LIMIT = 1300;
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -105,14 +106,18 @@ async function loadBook(page, url, waitMode) {
     }));
   });
 
-  const hasBookData = await page.evaluate(() => Boolean(document.getElementById("book-data")));
-  if (hasBookData) {
+  const shouldWaitForBookReady = await page.evaluate(() => {
+    if (!document.getElementById("book-data")) return false;
+    if (window.__BOOK_READY === true || window.__BOOK_READY === false) return true;
+    return [...document.scripts].some((script) => script.textContent.includes("__BOOK_READY"));
+  });
+  if (shouldWaitForBookReady) {
     await page.waitForFunction(() => window.__BOOK_READY === true || window.__BOOK_READY === false, null, { timeout: 60000 });
   }
 }
 
 async function renderedReport(page) {
-  return await page.evaluate(() => {
+  return await page.evaluate((shortSingleCharLimit) => {
     function intersects(a, b) {
       return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     }
@@ -128,10 +133,235 @@ async function renderedReport(page) {
       });
     }
 
+    function normalizeAssetUrl(value) {
+      const text = String(value || "").trim();
+      if (!text || text === "none") return "";
+      try {
+        return new URL(text, document.baseURI).href;
+      } catch {
+        return text;
+      }
+    }
+
+    function cssUrls(value) {
+      const urls = [];
+      const pattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
+      let match;
+      while ((match = pattern.exec(String(value || "")))) {
+        const url = normalizeAssetUrl(match[2]);
+        if (url) urls.push(url);
+      }
+      return urls;
+    }
+
+    function assetUrlsFor(root) {
+      if (!root) return [];
+      const urls = [];
+      const nodes = [root, ...root.querySelectorAll("*")];
+      for (const node of nodes) {
+        if (node instanceof HTMLImageElement) {
+          const url = normalizeAssetUrl(node.currentSrc || node.getAttribute("src"));
+          if (url) urls.push(url);
+        }
+        urls.push(...cssUrls(getComputedStyle(node).backgroundImage));
+      }
+      return [...new Set(urls)];
+    }
+
+    function pageLabel(page, index) {
+      if (!page) return "unknown page";
+      return page.id || page.getAttribute("aria-label") || `page ${index + 1}`;
+    }
+
+    function explicitBoolean(value) {
+      if (value === true || value === "true") return true;
+      if (value === false || value === "false") return false;
+      return null;
+    }
+
+    function embeddedBookData() {
+      const node = document.getElementById("book-data");
+      if (!node) return {};
+      try {
+        return JSON.parse(node.textContent || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function requiresPartDividerImages(coverAssetUrls) {
+      const policyNode = document.querySelector("[data-require-part-images]");
+      const attrPolicy = explicitBoolean(policyNode?.dataset.requirePartImages);
+      if (attrPolicy !== null) return attrPolicy;
+
+      const dataPolicy = explicitBoolean(embeddedBookData().requirePartImages);
+      if (dataPolicy !== null) return dataPolicy;
+
+      return coverAssetUrls.size > 0;
+    }
+
+    function normalizeText(value) {
+      return String(value || "")
+        .replace(/\s+/g, " ")
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .trim();
+    }
+
+    function frameText(frame) {
+      return normalizeText(frame?.textContent || "");
+    }
+
+    function hasRichFrameContent(frame) {
+      return Boolean(frame?.querySelector("figure, table, .diagram-card, .comparison-diagram, .callout, .span-all"));
+    }
+
+    function repeatedOpeningExcerptsFor(pages) {
+      const repeats = [];
+      pages.forEach((page, index) => {
+        if (!page.classList.contains("spread-right")) return;
+        const nextTextPage = pages.slice(index + 1).find((candidate) => candidate.classList.contains("text-page"));
+        if (!nextTextPage) return;
+        const nextText = normalizeText(nextTextPage.innerText);
+        const paragraphs = [...page.querySelectorAll(".spread-columns p, .opening-excerpt p")]
+          .filter((node) => !node.closest("blockquote"))
+          .map((node) => normalizeText(node.innerText))
+          .filter((text) => text.length >= 120);
+        for (const paragraph of paragraphs) {
+          if (nextText.includes(paragraph)) {
+            repeats.push({
+              spread: pageLabel(page, index),
+              body: pageLabel(nextTextPage, pages.indexOf(nextTextPage)),
+              text: paragraph.slice(0, 160)
+            });
+          }
+        }
+      });
+      return repeats;
+    }
+
+    function isAllowedOpeningPage(page) {
+      return page.dataset.allowOpeningSpread === "true" ||
+        page.dataset.allowOpeningPage === "true" ||
+        page.classList.contains("allow-opening-spread") ||
+        page.classList.contains("allow-opening-page");
+    }
+
+    function unrequestedOpeningPagesFor(pages) {
+      return [...document.querySelectorAll(".editorial-spread, .spread-left, .spread-right, .chapter-opener")]
+        .filter((page) => !isAllowedOpeningPage(page))
+        .map((page) => ({
+          page: pageLabel(page, pages.indexOf(page)),
+          className: page.className
+        }));
+    }
+
+    function shortTwoColumnPagesFor(pages) {
+      return pages
+        .filter((page) => page.classList.contains("text-page") && page.classList.contains("text-two") && !page.classList.contains("text-short-single"))
+        .map((page, index) => {
+          const frame = page.querySelector(".text-frame");
+          return {
+            page: pageLabel(page, index),
+            chars: frameText(frame).length,
+            className: page.className,
+            hasRichContent: hasRichFrameContent(frame)
+          };
+        })
+        .filter((item) => item.chars > 0 && item.chars <= shortSingleCharLimit && !item.hasRichContent);
+    }
+
+    function gridTrackCount(trackList) {
+      const text = String(trackList || "").trim();
+      if (!text || text === "none") return 0;
+      return text.split(/\s+/).filter(Boolean).length;
+    }
+
+    function isSparseRowLayout(grid) {
+      return grid.classList.contains("sparse-item-rows") ||
+        grid.classList.contains("sparse-rows") ||
+        grid.classList.contains("tool-rows") ||
+        grid.classList.contains("canvas-rows");
+    }
+
+    function sparseItemColumnGridsFor(pages) {
+      return [...document.querySelectorAll(".canvas-grid, .tool-grid, .feature-grid, .feature-columns, .taxonomy-grid")]
+        .map((grid) => {
+          const items = [...grid.children]
+            .filter((child) => child instanceof HTMLElement && normalizeText(child.innerText).length);
+          const itemChars = items.map((item) => normalizeText(item.innerText).length);
+          const totalChars = itemChars.reduce((sum, chars) => sum + chars, 0);
+          const page = grid.closest(".page");
+          return {
+            page: pageLabel(page, pages.indexOf(page)),
+            className: grid.className,
+            items: items.length,
+            columns: gridTrackCount(getComputedStyle(grid).gridTemplateColumns),
+            totalChars,
+            averageChars: items.length ? Math.round(totalChars / items.length) : 0,
+            isSparseRows: isSparseRowLayout(grid)
+          };
+        })
+        .filter((item) => item.items >= 4 &&
+          item.items <= 6 &&
+          item.columns >= 4 &&
+          item.totalChars > 0 &&
+          item.totalChars <= 1400 &&
+          item.averageChars <= 260 &&
+          !item.isSparseRows);
+    }
+
     const pages = [...document.querySelectorAll(".page")];
     const frames = [...document.querySelectorAll(".text-frame")];
     const overflowFrames = frames.filter((frame) => frame.scrollHeight > frame.clientHeight + 1 || frame.scrollWidth > frame.clientWidth + 1);
     const tailOverlaps = [...document.querySelectorAll(".text-page .tail-furniture")].filter(tailFurnitureOverlaps);
+    const missingTocTargets = [...document.querySelectorAll("[data-toc-page-for]")]
+      .map((node) => {
+        const target = node.dataset.tocPageFor || "";
+        return {
+          target,
+          text: node.textContent.trim(),
+          label: normalizeText(node.closest("li")?.innerText || target)
+        };
+      })
+      .filter((item) => !item.text || !document.getElementById(item.target));
+    const continuationMarks = [...document.querySelectorAll(".continuation-mark")].map((node) => ({
+      text: node.textContent.trim(),
+      page: pageLabel(node.closest(".page"), pages.indexOf(node.closest(".page")))
+    }));
+    const cover = document.querySelector(".page.cover, .cover");
+    const coverAssetUrls = new Set(assetUrlsFor(cover));
+    const coverAssetReuses = [];
+    pages.forEach((page, index) => {
+      if (page.classList.contains("cover") || page.classList.contains("option-cover")) return;
+      for (const asset of assetUrlsFor(page)) {
+        if (coverAssetUrls.has(asset)) {
+          coverAssetReuses.push({ page: pageLabel(page, index), asset });
+        }
+      }
+    });
+    const partDividers = [...document.querySelectorAll(".part-divider")];
+    const textOnlyPartDividers = [];
+    const duplicatePartDividerAssets = [];
+    const partAssetOwners = new Map();
+    const requirePartImages = requiresPartDividerImages(coverAssetUrls);
+    partDividers.forEach((part, index) => {
+      const assets = assetUrlsFor(part);
+      if (requirePartImages && !assets.length) textOnlyPartDividers.push(pageLabel(part, pages.indexOf(part)));
+      for (const asset of assets) {
+        const owner = partAssetOwners.get(asset);
+        const label = pageLabel(part, pages.indexOf(part));
+        if (owner && owner !== label) {
+          duplicatePartDividerAssets.push({ asset, first: owner, second: label });
+        } else {
+          partAssetOwners.set(asset, label);
+        }
+      }
+    });
+    const repeatedOpeningExcerpts = repeatedOpeningExcerptsFor(pages);
+    const unrequestedOpeningPages = unrequestedOpeningPagesFor(pages);
+    const shortTwoColumnPages = shortTwoColumnPagesFor(pages);
+    const sparseItemColumnGrids = sparseItemColumnGridsFor(pages);
     const text = document.body.innerText.replace(/\s+/g, " ").trim();
     return {
       ready: window.__BOOK_READY !== false,
@@ -140,17 +370,63 @@ async function renderedReport(page) {
       frames: frames.length,
       overflowFrames: overflowFrames.length,
       tailOverlaps: tailOverlaps.length,
+      missingTocTargets,
+      continuationMarks,
+      coverAssetReuses,
+      textOnlyPartDividers,
+      duplicatePartDividerAssets,
+      requirePartImages,
+      repeatedOpeningExcerpts,
+      unrequestedOpeningPages,
+      shortTwoColumnPages,
+      sparseItemColumnGrids,
       words: text ? text.split(/\s+/).length : 0,
       customPages: [...document.querySelectorAll(".custom-feature")].map((node) => node.id || node.getAttribute("aria-label") || "custom-feature")
     };
-  });
+  }, SHORT_SINGLE_CHAR_LIMIT);
+}
+
+function reportCount(report, field) {
+  const value = report[field];
+  if (Array.isArray(value)) return value.length;
+  return Number(value) || 0;
+}
+
+function countFailure(field, message) {
+  return {
+    failed: (report) => reportCount(report, field) > 0,
+    message: (report) => `${reportCount(report, field)} ${message}`
+  };
+}
+
+const reportFailureRules = [
+  {
+    failed: (report) => !report.ready,
+    message: (report) => `Book did not become ready: ${report.error || "unknown error"}`
+  },
+  countFailure("overflowFrames", "text frame(s) overflow"),
+  countFailure("tailOverlaps", "tail furniture block(s) overlap text"),
+  countFailure("missingTocTargets", "table-of-contents page reference(s) are missing or blank"),
+  countFailure("continuationMarks", "continuation marker(s) are visible in text-page titles"),
+  countFailure("coverAssetReuses", "interior page asset(s) reuse the cover image"),
+  countFailure("textOnlyPartDividers", "part divider(s) are missing generated image assets"),
+  countFailure("duplicatePartDividerAssets", "duplicated part-divider image asset(s)"),
+  countFailure("repeatedOpeningExcerpts", "opening spread excerpt(s) repeat on the following body page"),
+  countFailure("unrequestedOpeningPages", "unrequested opening page(s)"),
+  countFailure("shortTwoColumnPages", "short text page(s) should use text-short-single instead of sparse two-column layout"),
+  countFailure("sparseItemColumnGrids", "sparse item grid(s) should use sparse-item-rows instead of skinny columns")
+];
+
+function reportFailures(report) {
+  return reportFailureRules
+    .filter((rule) => rule.failed(report))
+    .map((rule) => rule.message(report));
 }
 
 async function assertReady(page) {
   const report = await renderedReport(page);
-  if (!report.ready) throw new Error(`Book did not become ready: ${report.error || "unknown error"}`);
-  if (report.overflowFrames) throw new Error(`${report.overflowFrames} text frame(s) overflow`);
-  if (report.tailOverlaps) throw new Error(`${report.tailOverlaps} tail furniture block(s) overlap text`);
+  const failures = reportFailures(report);
+  if (failures.length) throw new Error(failures[0]);
   return report;
 }
 
@@ -231,9 +507,13 @@ async function verifyBook(args) {
         htmlBytes: statSync(context.htmlPath).size,
         screenshots: outputDir,
         desktop,
-        mobile
+        mobile,
+        failures: {
+          desktop: reportFailures(desktop),
+          mobile: reportFailures(mobile)
+        }
       };
-      if (!desktop.ready || desktop.overflowFrames || desktop.tailOverlaps || !mobile.ready || mobile.overflowFrames || mobile.tailOverlaps) {
+      if (result.failures.desktop.length || result.failures.mobile.length) {
         result.failed = true;
       }
       writeFileSync(join(outputDir, "render-report.json"), JSON.stringify(result, null, 2));

@@ -312,6 +312,15 @@ table {
     line-height: 1.48;
 }
 
+.text-short-single .text-frame {
+    column-count: 1;
+    column-rule: 0;
+    max-width: min(var(--short-single-width, 7.54in), 100%);
+    margin-left: 0;
+    margin-right: auto;
+    text-align: left;
+}
+
 .text-frame h2,
 .text-frame h3,
 .text-frame figure,
@@ -612,6 +621,48 @@ figure {
     margin: 0;
     font-size: 15pt;
     line-height: 1.32;
+    color: var(--muted-ink, #2C3342);
+    text-indent: 0;
+}
+
+.sparse-item-rows {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--sparse-item-row-gap, 0.12in);
+    align-content: start;
+}
+
+.sparse-item-rows > * {
+    display: grid;
+    grid-template-columns: minmax(1.32in, 1.7in) minmax(0, 1fr);
+    gap: var(--sparse-item-row-column-gap, 0.24in);
+    align-items: baseline;
+    min-height: 0;
+    padding: var(--sparse-item-row-padding, 0.15in 0);
+    border-top: 1px solid var(--rule, #B7C8F3);
+    background: transparent;
+}
+
+.sparse-item-rows > *:first-child {
+    border-top: 0.04in solid var(--accent, #4F76D9);
+}
+
+.sparse-item-rows h3 {
+    margin: 0;
+    font-family: var(--font-display, var(--font-ui, Georgia, serif));
+    font-size: var(--sparse-item-title-size, 17pt);
+    font-weight: 800;
+    line-height: 1.06;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--heading-ink, #0A3695);
+}
+
+.sparse-item-rows p {
+    max-width: var(--sparse-item-copy-width, 4.85in);
+    margin: 0;
+    font-size: var(--sparse-item-copy-size, 10.4pt);
+    line-height: 1.43;
     color: var(--muted-ink, #2C3342);
     text-indent: 0;
 }
@@ -952,6 +1003,7 @@ th {
         .text-frame,
         .text-two .text-frame,
         .text-three .text-frame,
+        .text-short-single .text-frame,
         .text-stack .text-frame {
             column-count: 1;
             column-rule: 0;
@@ -983,7 +1035,8 @@ th {
         }
 
         .sparse-feature .feature-columns.two,
-        .sparse-feature .feature-anchor {
+        .sparse-feature .feature-anchor,
+        .sparse-item-rows > * {
             grid-template-columns: 1fr;
         }
 }
