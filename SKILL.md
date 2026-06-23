@@ -79,6 +79,7 @@ If the user does not answer optional preferences, choose defaults:
 - Book type: textbook for instructional material, coffee-table book for evocative narrative or visual subject matter, manual for procedural content.
 - Audience: general reader unless the text clearly targets a specialist.
 - Visual policy: diagrams freely, and generated images are required when the system provides an image-generation tool, unless the user explicitly asks for diagrams only, supplied images only, a deliberately plain reader edition, or no generated images. Do not silently choose diagrams-only in the default case.
+- Theme selection: before choosing the default theme, check whether the user mentioned a registered theme name or alias from `themes/index.mjs`, such as `alumni`, `colbalt`, `cobalt`, `default`, or `executive`. If matched, set `book.json.style` to that theme and use that theme's `imagePrompt.template` for generated cover and section art.
 - Visual direction: use the default `colbalt` editorial theme unless the user mentions style, aesthetic, visual direction, or a named design reference. The default theme uses Poppins Bold for headings, Halant for body text, cobalt hierarchy, and a lighter cobalt-blue accent from Google Fonts when network use is available, with strong local fallbacks when it is not.
 - Author: use the supplied author; otherwise use the current user's name when it is reliable from context. If not reliable, ask before final export.
 - Publisher/imprint: omit unless supplied. Do not fabricate an imprint just to fill space.
@@ -261,6 +262,8 @@ Cover quality gates:
 - Include publisher/imprint only when supplied. If included, keep it subordinate to title and author.
 
 ## Phase 4: Style Defaults and Style Discovery
+
+Before choosing the default theme, check whether the user mentioned a registered theme name or alias from `themes/index.mjs`, such as `alumni`, `colbalt`, `cobalt`, `default`, or `executive`. If matched, set `book.json.style` to that theme and use that theme's `imagePrompt.template` for generated cover and section art.
 
 If the user does not mention style, aesthetic, visual direction, or a named design reference, use the default `colbalt` editorial theme and keep moving. Do not stop to ask for style preferences, and do not generate style previews by default.
 
