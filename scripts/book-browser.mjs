@@ -5,6 +5,9 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { chromium } from "playwright";
 
 const SHORT_SINGLE_CHAR_LIMIT = 1300;
+const LONG_FLOW_WORD_LIMIT = 1400;
+const NARROW_FLOW_WORD_LIMIT = 250;
+const NARROW_FLOW_MEASURE_IN = 3.75;
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -117,7 +120,14 @@ async function loadBook(page, url, waitMode) {
 }
 
 async function renderedReport(page) {
-  return await page.evaluate((shortSingleCharLimit) => {
+  return await page.evaluate((limits) => {
+    const {
+      shortSingleCharLimit,
+      longFlowWordLimit,
+      narrowFlowWordLimit,
+      narrowFlowMeasureIn
+    } = limits;
+
     function intersects(a, b) {
       return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     }
@@ -217,6 +227,45 @@ async function renderedReport(page) {
         .replace(/[“”]/g, '"')
         .replace(/[‘’]/g, "'")
         .trim();
+    }
+
+    function wordCountText(value) {
+      const text = normalizeText(value);
+      return text ? text.split(/\s+/).length : 0;
+    }
+
+    function allowsFlowingProse(node) {
+      return Boolean(node?.closest?.("[data-allow-flowing-prose='true'], [data-plain-reader='true']"));
+    }
+
+    function measurePxPerIn() {
+      const probe = document.createElement("div");
+      probe.style.position = "absolute";
+      probe.style.left = "-1000px";
+      probe.style.top = "0";
+      probe.style.width = "1in";
+      probe.style.height = "1px";
+      document.body.appendChild(probe);
+      const width = probe.getBoundingClientRect().width || 96;
+      probe.remove();
+      return width;
+    }
+
+    function chapterFlowSectionsFor() {
+      const pxPerIn = measurePxPerIn();
+      return [...document.querySelectorAll(".chapter-flow")].map((flow, index) => {
+        const rect = flow.getBoundingClientRect();
+        const styles = getComputedStyle(flow);
+        const paddingX = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+        const contentWidthPx = Math.max(0, rect.width - paddingX);
+        return {
+          section: flow.id || flow.getAttribute("aria-label") || `chapter-flow ${index + 1}`,
+          className: flow.className,
+          words: wordCountText(flow.innerText || flow.textContent),
+          contentWidthIn: Number((contentWidthPx / pxPerIn).toFixed(2)),
+          allowFlowingProse: allowsFlowingProse(flow)
+        };
+      });
     }
 
     function frameText(frame) {
@@ -401,6 +450,19 @@ async function renderedReport(page) {
     const unrequestedOpeningPages = unrequestedOpeningPagesFor(pages);
     const shortTwoColumnPages = shortTwoColumnPagesFor(pages);
     const sparseItemColumnGrids = sparseItemColumnGridsFor(pages);
+    const chapterFlowSections = chapterFlowSectionsFor();
+    const unallowedChapterFlows = chapterFlowSections.filter((section) => !section.allowFlowingProse);
+    const unallowedChapterFlowWords = unallowedChapterFlows.reduce((sum, section) => sum + section.words, 0);
+    const missingMeasuredTextPages = !frames.length && unallowedChapterFlowWords >= longFlowWordLimit
+      ? [{ sections: unallowedChapterFlows.length, words: unallowedChapterFlowWords }]
+      : [];
+    const unmeasuredChapterFlows = chapterFlowSections.filter((section) =>
+      !section.allowFlowingProse && section.words >= longFlowWordLimit);
+    const narrowChapterFlows = chapterFlowSections.filter((section) =>
+      !section.allowFlowingProse &&
+      section.words >= narrowFlowWordLimit &&
+      section.contentWidthIn > 0 &&
+      section.contentWidthIn < narrowFlowMeasureIn);
     const diagramElements = diagramElementsFor(pages);
     const requireDiagrams = requiresDiagrams();
     const text = document.body.innerText.replace(/\s+/g, " ").trim();
@@ -424,10 +486,20 @@ async function renderedReport(page) {
       unrequestedOpeningPages,
       shortTwoColumnPages,
       sparseItemColumnGrids,
+      chapterFlows: chapterFlowSections.length,
+      chapterFlowWords: chapterFlowSections.reduce((sum, section) => sum + section.words, 0),
+      missingMeasuredTextPages,
+      unmeasuredChapterFlows,
+      narrowChapterFlows,
       words: text ? text.split(/\s+/).length : 0,
       customPages: [...document.querySelectorAll(".custom-feature")].map((node) => node.id || node.getAttribute("aria-label") || "custom-feature")
     };
-  }, SHORT_SINGLE_CHAR_LIMIT);
+  }, {
+    shortSingleCharLimit: SHORT_SINGLE_CHAR_LIMIT,
+    longFlowWordLimit: LONG_FLOW_WORD_LIMIT,
+    narrowFlowWordLimit: NARROW_FLOW_WORD_LIMIT,
+    narrowFlowMeasureIn: NARROW_FLOW_MEASURE_IN
+  });
 }
 
 function reportCount(report, field) {
@@ -462,7 +534,10 @@ const reportFailureRules = [
   countFailure("repeatedOpeningExcerpts", "opening spread excerpt(s) repeat on the following body page"),
   countFailure("unrequestedOpeningPages", "unrequested opening page(s)"),
   countFailure("shortTwoColumnPages", "short text page(s) should use text-short-single instead of sparse two-column layout"),
-  countFailure("sparseItemColumnGrids", "sparse item grid(s) should use sparse-item-rows instead of skinny columns")
+  countFailure("sparseItemColumnGrids", "sparse item grid(s) should use sparse-item-rows instead of skinny columns"),
+  countFailure("missingMeasuredTextPages", "book(s) have substantial unmeasured chapter-flow prose but no measured text pages"),
+  countFailure("unmeasuredChapterFlows", "long unmeasured chapter-flow section(s); use .page.text-page pagination or mark intentional plain-reader flow with data-allow-flowing-prose"),
+  countFailure("narrowChapterFlows", "chapter-flow section(s) have accidentally narrow text measures")
 ];
 
 function reportFailures(report) {

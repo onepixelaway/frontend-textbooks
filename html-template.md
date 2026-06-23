@@ -6,6 +6,7 @@ Use this template as a starting point, not a literal requirement. The important 
 
 - Letter page print rules
 - Preserved manuscript prose
+- Measured `.page.text-page` body pagination for designed prose books
 - Semantic figures, diagrams, tables, and captions
 - HTML and PDF produced from the same source file
 
@@ -251,14 +252,6 @@ For a single-file book with no external images, `[book-title].html` next to `[bo
         </div>
       </section>
 
-      <section class="chapter-flow flow-single" aria-label="Chapter 1 text">
-        <p class="running-head">Chapter 1</p>
-        <h2>Section Heading From Manuscript</h2>
-        <p class="lede no-indent">First paragraph or lede from the manuscript.</p>
-        <p>Preserve body paragraphs here. Let print CSS paginate long prose instead of compressing it into too few designed pages.</p>
-        <p>Additional manuscript paragraphs continue in order.</p>
-      </section>
-
       <section class="page text-page text-two" aria-label="Two-column analytical body page">
         <div class="page-inner">
           <header class="text-page-header">
@@ -319,18 +312,26 @@ Use explicit `.page` sections for:
 
 - Cover and title page
 - Table of contents
-- Chapter openers
+- Chapter body text pages
 - Full-page image plates
 - Full-page diagrams
 - Designed tables and workbook pages
 - Section dividers
 
-Use `.chapter-flow` sections for:
+Use `.page.text-page` sections for normal preserved manuscript prose in designed books. Create as many continuation pages as needed, fill each `.text-frame` only until it fits, and continue the chapter on another `.page.text-page`.
 
-- Long preserved manuscript prose
-- Chapters with many paragraphs
-- Appendices
-- Notes and bibliography
+Use `.chapter-flow` only when the output is intentionally a plain reader, or for appendices, notes, bibliography, and other back matter where designed body pages are not the goal. Mark intentional long flow prose with `data-allow-flowing-prose="true"` on the `.book` root or on the specific `.chapter-flow` section:
+
+```html
+<article class="book" id="book" data-allow-flowing-prose="true">
+  <section class="chapter-flow" aria-label="Plain reader chapter">
+    <h1>Chapter Title</h1>
+    <p>Long preserved manuscript prose may flow here only for a deliberate plain-reader edition.</p>
+  </section>
+</article>
+```
+
+Do not use `<section class="chapter-flow flow-single">` as the default chapter body in an editorial, HBR-like, field-guide, business, or coffee-table book. A designed book with substantial body prose but no `.text-frame` pages is a failed layout.
 
 ## Atomic Page Integrity
 
@@ -607,7 +608,7 @@ Rules:
 
 ## Measured Text-Page Pagination
 
-For editorial/coffee-table body prose, prefer measured `.text-page` pagination over one wide `.chapter-flow`.
+For editorial/coffee-table body prose, use measured `.text-page` pagination instead of long `.chapter-flow`. Reserve `.chapter-flow` for intentional plain-reader or appendix material marked with `data-allow-flowing-prose="true"`.
 
 Required behavior:
 
