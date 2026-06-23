@@ -2,6 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_THEME_NAME, STYLE_NAMES, getTheme, renderThemeFontLinks, themeColors, themeFontStack } from "../themes/index.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(scriptDir, "..");
@@ -9,31 +10,6 @@ const LETTER_WIDTH_IN = 8.5;
 const LETTER_HEIGHT_IN = 11;
 const DEFAULT_COVER_BAND_HEIGHT_IN = 3.55;
 const SHORT_SINGLE_CHAR_LIMIT = 1300;
-const DEFAULT_THEME = {
-  browser: "#d7d7d3", page: "#fbfaf6", ink: "#10131A", heading: "#0A3695", deck: "#19419A", muted: "#2C3342", meta: "#69738F", accent: "#4F76D9", soft: "#B7C8F3", rule: "#9BB2EA", steel: "#19419A", coverBand: "#0A3695", callout: "#f1f5ff",
-  display: '"Poppins", "Avenir Next", Helvetica, Arial, sans-serif', body: '"Halant", Georgia, serif', ui: '"Poppins", "Avenir Next", Helvetica, Arial, sans-serif'
-};
-const THEMES = {
-  default: DEFAULT_THEME,
-  executive: DEFAULT_THEME,
-  "field-guide": {
-    browser: "#c7c0ad", page: "#f7f1e5", ink: "#202018", muted: "#657060", accent: "#3f6f46", steel: "#1f2d22",
-    display: '"Avenir Next", Inter, Helvetica, Arial, sans-serif', body: 'Georgia, "Times New Roman", serif', ui: '"Avenir Next", Inter, Helvetica, Arial, sans-serif'
-  },
-  scholarly: {
-    browser: "#d9d2c4", page: "#fbf7ed", ink: "#191714", muted: "#6f6659", accent: "#8d2f24", steel: "#15130f",
-    display: 'Georgia, "Times New Roman", serif', body: 'Georgia, "Times New Roman", serif', ui: '"Avenir Next", Inter, Helvetica, Arial, sans-serif'
-  },
-  technical: {
-    browser: "#c9d0d2", page: "#ffffff", ink: "#15191d", muted: "#5b6770", accent: "#0b6fa4", steel: "#0e2638",
-    display: 'Arial, Helvetica, sans-serif', body: 'Arial, Helvetica, sans-serif', ui: 'Arial, Helvetica, sans-serif'
-  },
-  literary: {
-    browser: "#d3ccc0", page: "#fcfaf5", ink: "#1b1814", muted: "#6e675f", accent: "#6c2d2a", steel: "#1b1814",
-    display: 'Georgia, "Times New Roman", serif', body: 'Georgia, "Times New Roman", serif', ui: '"Avenir Next", Inter, Helvetica, Arial, sans-serif'
-  }
-};
-const STYLE_NAMES = Object.keys(THEMES);
 const BODY_COLUMN_CLASSES = ["text-two", "text-single", "text-three"];
 
 function numberInRange(value, fallback, min, max) {
@@ -310,7 +286,7 @@ const book = {
   requirePartImages: booleanValue(config.requirePartImages, "requirePartImages", Boolean(coverImage && parsed.parts.length)),
   requireDiagrams: booleanValue(config.requireDiagrams, "requireDiagrams", defaultRequireDiagrams(config)),
   chapterOpeners: booleanValue(config.chapterOpeners, "chapterOpeners", false),
-  style: enumValue(config.style, "style", STYLE_NAMES, "default"),
+  style: enumValue(config.style, "style", STYLE_NAMES, DEFAULT_THEME_NAME),
   bodyColumns: enumValue(config.bodyColumns, "bodyColumns", BODY_COLUMN_CLASSES, "text-two")
 };
 
@@ -402,30 +378,28 @@ function coverBackground() {
 }
 
 function fontLinks() {
-  return `
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Halant:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">`;
+  return renderThemeFontLinks(getTheme(book.style));
 }
 
 function themeCss() {
-  const theme = THEMES[book.style] ?? DEFAULT_THEME;
-  const heading = theme.heading ?? theme.ink;
-  const deck = theme.deck ?? theme.steel;
-  const muted = theme.muted;
-  const meta = theme.meta ?? muted;
-  const accent = theme.accent ?? deck;
-  const soft = theme.soft ?? theme.rule ?? muted;
-  const rule = theme.rule ?? `color-mix(in srgb, ${muted} 28%, ${theme.page})`;
-  const callout = theme.callout ?? `color-mix(in srgb, ${theme.page} 84%, ${muted})`;
+  const theme = getTheme(book.style);
+  const colors = themeColors(theme);
+  const heading = colors.heading ?? colors.ink;
+  const deck = colors.deck ?? colors.steel;
+  const muted = colors.muted;
+  const meta = colors.meta ?? muted;
+  const accent = colors.accent ?? deck;
+  const soft = colors.soft ?? colors.rule ?? muted;
+  const rule = colors.rule ?? `color-mix(in srgb, ${muted} 28%, ${colors.page})`;
+  const callout = colors.callout ?? `color-mix(in srgb, ${colors.page} 84%, ${muted})`;
   const coverBandHeight = book.coverBandHeight.toFixed(2);
   const coverArtHeight = (LETTER_HEIGHT_IN - book.coverBandHeight).toFixed(2);
   const coverArtAspect = (LETTER_WIDTH_IN / (LETTER_HEIGHT_IN - book.coverBandHeight)).toFixed(3);
   return `
 :root {
-  --browser-bg: ${theme.browser};
-  --page-bg: ${theme.page};
-  --ink: ${theme.ink};
+  --browser-bg: ${colors.browser};
+  --page-bg: ${colors.page};
+  --ink: ${colors.ink};
   --heading-ink: ${heading};
   --deck-ink: ${deck};
   --muted-ink: ${muted};
@@ -433,16 +407,16 @@ function themeCss() {
   --running-ink: ${meta};
   --accent: ${accent};
   --soft-accent: ${soft};
-  --steel: ${theme.steel ?? deck};
-  --cover-band: ${theme.coverBand ?? heading};
+  --steel: ${colors.steel ?? deck};
+  --cover-band: ${colors.coverBand ?? heading};
   --cover-band-height: ${coverBandHeight}in;
   --cover-art-height: ${coverArtHeight}in;
   --cover-art-aspect: ${coverArtAspect};
   --rule: ${rule};
   --callout-bg: ${callout};
-  --font-display: ${theme.display};
-  --font-body: ${theme.body};
-  --font-ui: ${theme.ui};
+  --font-display: ${themeFontStack(theme, "display")};
+  --font-body: ${themeFontStack(theme, "body")};
+  --font-ui: ${themeFontStack(theme, "ui")};
   --page-margin-top: 0.72in;
   --page-margin-bottom: 0.72in;
   --page-margin-inner: 0.78in;

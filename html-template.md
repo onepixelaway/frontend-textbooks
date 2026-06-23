@@ -32,13 +32,13 @@ For a single-file book with no external images, `[book-title].html` next to `[bo
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Book Title</title>
 
-  <!-- Default style: Poppins Bold headings/UI and Halant body from Google Fonts. -->
+  <!-- Default colbalt theme: Poppins Bold headings/UI and Halant body from Google Fonts. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Halant:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
 
   <style>
-    /* === THEME TOKENS === */
+    /* === THEME TOKENS: scaffold defaults live in themes/colbalt/index.mjs === */
     :root {
       --browser-bg: #d8d4cb;
       --page-bg: #fbfaf6;

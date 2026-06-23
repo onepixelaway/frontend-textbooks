@@ -4,7 +4,9 @@ Use these as starting points only when the user mentions style/aesthetic, asks f
 
 Avoid generic AI aesthetics: purple gradients, identical cards, centered everything, system-font blandness, and decoration that fights the prose.
 
-## Default Cobalt Editorial Style
+## Default Colbalt Editorial Theme
+
+The scaffold source of truth for this default is [themes/colbalt/index.mjs](themes/colbalt/index.mjs). Keep font stacks, color tokens, and the generated-image prompt synchronized there first; this section documents the design language for agents and manual builds.
 
 **Use by default when:** the user supplies a manuscript without mentioning style, aesthetic, or a named visual reference.
 
@@ -58,6 +60,8 @@ Palette roles:
 
 **Default generated image prompt**
 
+The reusable prompt template also lives in `themes/colbalt/index.mjs` as `imagePrompt.template`.
+
 Use this prompt template when generated images are useful and the user has not supplied a different image style. Keep the `[SUBJECT / SCENE]` simple and concrete: one or two main subjects, plus at most one or two clear visual metaphors that refer to recognizable things. Prefer visible objects, scenes, actions, and settings over abstract concepts. Do not ask the image model to illustrate vague abstractions like "decision paths," "system dynamics," "alignment," "follow-through loops," or "stakeholder pressure" unless they are translated into concrete objects such as a doorway, map, table, calendar, notebook, bridge, forked road, clock, stack of papers, or marked-up page.
 
 Preserve the template prose exactly. Replace only `[SUBJECT / SCENE]` with the concrete manuscript-grounded subject. Do not rewrite the template into a full structured image-generation schema. If useful for the tool call, prepend only `Use case`, `Asset type`, and `Constraints` lines; the style, composition, material, and mood language should remain the template text below.
@@ -82,6 +86,10 @@ Elegant, poetic, restrained, modern, contemplative, tactile, printmaking-inspire
 - Default cover composition: generated/supplied image in the upper field, with title, subtitle, and author in a solid cobalt bottom band; generate cover artwork for the upper field's roughly `1.14:1` aspect ratio and avoid dark overlays that obscure the artwork
 - Cover-options sprint for all finished books, with the selected route matched in the final cover
 - Designed body pages, chapter openers, diagrams, and tool pages when the manuscript supports them
+
+## Alumni Theme
+
+The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt shifts the artwork darker and more cinematic, with amber chiaroscuro, espresso shadows, and restrained editorial photography.
 
 ## 1. Scholarly Marginalia
 

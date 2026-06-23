@@ -91,7 +91,7 @@ The skill will:
 
 ## Included Styles
 
-The default style is a cobalt editorial system:
+The default style is the `colbalt` theme, a cobalt editorial system defined in `themes/colbalt`:
 
 - Poppins for headings and labels
 - Halant for body copy
@@ -100,7 +100,9 @@ The default style is a cobalt editorial system:
 - Two-column editorial reading pages
 - Solid-band split cover support for generated or supplied artwork
 
-Additional presets in `STYLE_PRESETS.md` include scholarly, field-guide, technical, literary, editorial journal, and product-manual directions. They are starting points, not cages.
+The scaffold also includes an `alumni` theme inspired by a warm single-ink editorial system: Bricolage Grotesque display type, Fraunces body copy, rust terracotta ink, and cream paper.
+
+Additional presets in `STYLE_PRESETS.md` include scholarly, field-guide, technical, literary, editorial journal, and product-manual directions. To make a preset available to the scaffold, add it as a module under `themes/` and register it in `themes/index.mjs`.
 
 ## Repository Contents
 
@@ -113,6 +115,12 @@ frontend-textbooks/
   animation-patterns.md
   references/
     pdf-optimization.md
+  themes/
+    alumni/
+      index.mjs
+    colbalt/
+      index.mjs
+    index.mjs
   scripts/
     build-html-book.mjs
     export-pdf.sh

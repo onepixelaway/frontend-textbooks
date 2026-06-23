@@ -79,7 +79,7 @@ If the user does not answer optional preferences, choose defaults:
 - Book type: textbook for instructional material, coffee-table book for evocative narrative or visual subject matter, manual for procedural content.
 - Audience: general reader unless the text clearly targets a specialist.
 - Visual policy: diagrams freely, and generated images are required when the system provides an image-generation tool, unless the user explicitly asks for diagrams only, supplied images only, a deliberately plain reader edition, or no generated images. Do not silently choose diagrams-only in the default case.
-- Visual direction: use the default cobalt editorial style unless the user mentions style, aesthetic, visual direction, or a named design reference. The default style uses Poppins Bold for headings, Halant for body text, cobalt hierarchy, and a lighter cobalt-blue accent from Google Fonts when network use is available, with strong local fallbacks when it is not.
+- Visual direction: use the default `colbalt` editorial theme unless the user mentions style, aesthetic, visual direction, or a named design reference. The default theme uses Poppins Bold for headings, Halant for body text, cobalt hierarchy, and a lighter cobalt-blue accent from Google Fonts when network use is available, with strong local fallbacks when it is not.
 - Author: use the supplied author; otherwise use the current user's name when it is reliable from context. If not reliable, ask before final export.
 - Publisher/imprint: omit unless supplied. Do not fabricate an imprint just to fill space.
 
@@ -262,9 +262,11 @@ Cover quality gates:
 
 ## Phase 4: Style Defaults and Style Discovery
 
-If the user does not mention style, aesthetic, visual direction, or a named design reference, use the default cobalt editorial style and keep moving. Do not stop to ask for style preferences, and do not generate style previews by default.
+If the user does not mention style, aesthetic, visual direction, or a named design reference, use the default `colbalt` editorial theme and keep moving. Do not stop to ask for style preferences, and do not generate style previews by default.
 
-Default style:
+Default theme:
+
+The scaffold source of truth is [themes/colbalt/index.mjs](themes/colbalt/index.mjs), which defines fonts, colors, and the generated-image prompt.
 
 - Headings/display: Poppins Bold from Google Fonts.
 - Body text: Halant from Google Fonts.
@@ -293,7 +295,7 @@ Read [STYLE_PRESETS.md](STYLE_PRESETS.md) only when style/aesthetic is in scope 
 
 Skip preview generation when:
 
-- The user did not mention style/aesthetic; use the default cobalt editorial style.
+- The user did not mention style/aesthetic; use the default `colbalt` editorial theme.
 - The user explicitly gives a precise design direction; execute it directly.
 - The task is a fast conversion where style choice is less important than delivery.
 - The manuscript is tiny and a polished single-pass design is clearly sufficient.
@@ -342,7 +344,7 @@ HTML requirements:
 - Include the full contents of `page-base.css` in the final HTML.
 - Use `@page { size: letter; }` and `print-color-adjust: exact`.
 - Use named CSS variables for color, typography, spacing, and figure styles.
-- Use real web fonts from Google Fonts or Fontshare when network use is acceptable; by default load Poppins Bold for headings/UI and Halant for body text. Otherwise define strong fallbacks.
+- Use real web fonts from Google Fonts or Fontshare when network use is acceptable; by default follow the active theme's font links. The `colbalt` theme loads Poppins Bold for headings/UI and Halant for body text. Otherwise define strong fallbacks.
 - Include a print button or export note only if it does not pollute the PDF.
 - Keep export buttons, development notes, and production workflow reminders screen-only. Never put generated/exported/source-of-truth/toolchain language in print-visible book pages.
 - Ensure page breaks do not split covers, figures, tables, callouts, or headings from their following paragraph.
@@ -500,6 +502,7 @@ For single HTML files with assets, prefer deploying the containing folder so ima
 | File | Purpose | When to Read |
 | ---- | ------- | ------------ |
 | [STYLE_PRESETS.md](STYLE_PRESETS.md) | Book-specific visual systems and font/color guidance | Style discovery and final design |
+| [themes/](themes/) | Scaffold theme modules with fonts, color roles, and generated-image prompt templates | Scaffolded books and theme changes |
 | [page-base.css](page-base.css) | Mandatory Letter page and print CSS | Final HTML generation |
 | [html-template.md](html-template.md) | HTML architecture for book pages, flowing chapters, figures, and controls | Final HTML generation |
 | [animation-patterns.md](animation-patterns.md) | Subtle browser-only effects and visual pacing patterns | Only when interactive HTML polish helps |
