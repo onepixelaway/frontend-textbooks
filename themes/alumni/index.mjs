@@ -1,4 +1,8 @@
-const imagePromptTemplate = `[SUBJECT] in a dark cinematic amber chiaroscuro scene, quiet minimalist composition, deep warm shadows, glowing ember-orange light, near-black silhouettes, soft atmospheric haze, subtle bloom, burnt orange and espresso brown monochrome palette, sparse negative space, elegant vertical framing, contemplative art-film still, poetic solitude, dramatic rim lighting, soft gradients, low-key exposure, warm window-light or horizon-glow effect, thin luminous light accents, refined cinematic realism, moody editorial photography, quiet luxury, no text, no logo, no bright colors, no clutter`;
+const imagePromptTemplate = `[SUBJECT] in a sun-drenched pastel Mediterranean setting, editorial lifestyle photography, warm coastal villa atmosphere, peach and coral stucco walls, powder blue painted trim, cream and ivory surfaces, terracotta accents, tomato red details, soft sage greenery, bright clear daylight, strong natural sunlight, crisp but gentle shadows, airy high-key exposure.
+
+Styled with tactile handmade textures: glazed ceramic vases, woven baskets, linen curtains, boucle or woven textiles, fresh flowers, citrus fruit, potted palms, sculptural plants, painted wood, matte stucco, subtle vintage decor. Calm luxurious vacation-house mood, optimistic 1970s resort aesthetic, modern boutique hotel styling, art-directed color palette, clean composition, one clear focal point, spacious negative space, elegant magazine editorial framing.
+
+Photorealistic but slightly stylized, soft film grain, natural skin tones if people are present, refined color harmony, warm nostalgic summer atmosphere, vertical composition, crisp details, gentle depth of field, no text, no logo, no clutter, no dark moody lighting, no harsh black shadows, no neon colors, no futuristic elements.`;
 
 const alumniTheme = {
   id: "alumni",
@@ -47,7 +51,7 @@ const alumniTheme = {
     guidance: [
       "Use this prompt template when generated images are useful and the alumni theme is active.",
       "Replace only [SUBJECT] with a concrete manuscript-grounded subject.",
-      "Keep cover and divider images in the same amber cinematic language, changing only the subject phrase."
+      "Keep cover and divider images in the same sun-drenched Mediterranean editorial language, changing only the subject phrase."
     ],
     template: imagePromptTemplate
   }
