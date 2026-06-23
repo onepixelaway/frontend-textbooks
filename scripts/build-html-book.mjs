@@ -8,6 +8,7 @@ const skillDir = resolve(scriptDir, "..");
 const LETTER_WIDTH_IN = 8.5;
 const LETTER_HEIGHT_IN = 11;
 const DEFAULT_COVER_BAND_HEIGHT_IN = 3.55;
+const SHORT_SINGLE_CHAR_LIMIT = 1300;
 const DEFAULT_THEME = {
   browser: "#d7d7d3", page: "#fbfaf6", ink: "#10131A", heading: "#0A3695", deck: "#19419A", muted: "#2C3342", meta: "#69738F", accent: "#4F76D9", soft: "#B7C8F3", rule: "#9BB2EA", steel: "#19419A", coverBand: "#0A3695", callout: "#f1f5ff",
   display: '"Poppins", "Avenir Next", Helvetica, Arial, sans-serif', body: '"Halant", Georgia, serif', ui: '"Poppins", "Avenir Next", Helvetica, Arial, sans-serif'
@@ -53,6 +54,8 @@ book.json fields:
   coverImage   optional, path or URL as it should appear from outputHtml
                with the default band, split-cover art slot is ${LETTER_WIDTH_IN}in x ${(LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN).toFixed(2)}in, aspect ${(LETTER_WIDTH_IN / (LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN)).toFixed(2)}:1
   coverBandHeight optional inches for the bottom cover band, default 3.55
+  requirePartImages optional boolean; defaults to true when coverImage is set and the manuscript has parts
+  chapterOpeners optional boolean; default false. When false, chapters start directly on text pages.
   chapterClosers optional object keyed by chapter id, title, or number for generated chapter-close copy
   partImages   optional object keyed by part id, title, label, or number for generated part-divider art; if provided, must cover every part and use unique values
   style         optional: ${STYLE_NAMES.join(" | ")}
@@ -127,6 +130,17 @@ function enumValue(value, field, allowed, fallback) {
   const text = String(value).trim();
   if (allowed.includes(text)) return text;
   throw new Error(`${field} must be one of: ${allowed.join(", ")}`);
+}
+
+function booleanValue(value, field, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (["true", "yes", "1"].includes(text)) return true;
+    if (["false", "no", "0"].includes(text)) return false;
+  }
+  throw new Error(`${field} must be a boolean.`);
 }
 
 function normalizeMap(value, field, cleanValue = plainText) {
@@ -271,24 +285,25 @@ const configMaps = {
   partImages: normalizeMap(config.partImages, "partImages", trimmedText)
 };
 
+const parsed = parseManuscript(manuscript);
+if (!parsed.chapters.length) throw new Error("No chapters found in manuscript.");
+
+const coverImage = trimmedText(config.coverImage);
 const book = {
   title: plainText(config.title),
   subtitle: plainText(config.subtitle ?? ""),
   author: plainText(config.author),
   bookType: plainText(config.bookType ?? "Book"),
   coverKicker: plainText(config.coverKicker ?? "A book"),
-  coverImage: trimmedText(config.coverImage),
+  coverImage,
   coverBandHeight: numberInRange(config.coverBandHeight, DEFAULT_COVER_BAND_HEIGHT_IN, 2.8, 4.4),
+  requirePartImages: booleanValue(config.requirePartImages, "requirePartImages", Boolean(coverImage && parsed.parts.length)),
+  chapterOpeners: booleanValue(config.chapterOpeners, "chapterOpeners", false),
   style: enumValue(config.style, "style", STYLE_NAMES, "default"),
   bodyColumns: enumValue(config.bodyColumns, "bodyColumns", BODY_COLUMN_CLASSES, "text-two")
 };
 
-if (!book.title || !book.author) {
-  throw new Error("book.json must include non-empty title and author.");
-}
-
-const parsed = parseManuscript(manuscript);
-if (!parsed.chapters.length) throw new Error("No chapters found in manuscript.");
+if (!book.title || !book.author) throw new Error("book.json must include non-empty title and author.");
 
 function firstParagraph(chapter) {
   return chapter.blocks.find((block) => block.type === "p")?.html ?? "";
@@ -312,27 +327,42 @@ function partDisplayName(part) {
   return [part.label, part.title].filter(Boolean).join(": ") || part.id;
 }
 
+function normalizedAssetPath(value) {
+  return trimmedText(value).replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
+}
+
 function assertUniquePartImages(parts) {
   const seen = new Map();
   for (const part of parts) {
-    if (!part.image) continue;
-    const previous = seen.get(part.image);
+    const asset = normalizedAssetPath(part.image);
+    if (!asset) continue;
+    const previous = seen.get(asset);
     if (previous) {
-      throw new Error(`partImages must use a distinct image asset for each part divider. "${part.image}" is assigned to both "${partDisplayName(previous)}" and "${partDisplayName(part)}". Generate separate section-grounded images or distinct variants.`);
+      throw new Error(`partImages must use a distinct image asset for each part divider. "${part.image}" resolves to the same asset as "${previous.image}" for "${partDisplayName(previous)}" and "${partDisplayName(part)}". Generate separate section-grounded images or distinct variants.`);
     }
-    seen.set(part.image, part);
+    seen.set(asset, part);
   }
 }
 
-function assertCompletePartImages(parts, partImages) {
-  if (!hasMapEntries(partImages)) return;
+function assertCompletePartImages(parts, hasExplicitPartImages, required) {
+  if (!required && !hasExplicitPartImages) return;
   if (!parts.length) {
-    throw new Error("partImages were provided, but the manuscript has no parsed part dividers.");
+    throw new Error(required ? "requirePartImages is true, but the manuscript has no parsed part dividers." : "partImages were provided, but the manuscript has no parsed part dividers.");
   }
   const missing = parts.filter((part) => !part.image);
   if (missing.length) {
     const names = missing.map(partDisplayName).join("; ");
     throw new Error(`partImages must cover every parsed part divider when used. Missing image asset(s) for: ${names}. Generate section-grounded art for each part, using the same cover-image format and prompt style with distinct subjects.`);
+  }
+}
+
+function assertPartImagesDoNotReuseCover(parts, coverImage) {
+  const cover = normalizedAssetPath(coverImage);
+  if (!cover) return;
+  const reused = parts.filter((part) => normalizedAssetPath(part.image) === cover);
+  if (reused.length) {
+    const names = reused.map(partDisplayName).join("; ");
+    throw new Error(`partImages must not reuse the cover image asset (${coverImage}). Generate distinct section-grounded art for: ${names}.`);
   }
 }
 
@@ -345,8 +375,9 @@ parsed.parts.forEach((part, index) => {
   const image = lookupMap(configMaps.partImages, partLookupKeys(part, index));
   if (image) part.image = image;
 });
-assertCompletePartImages(parsed.parts, configMaps.partImages);
+assertCompletePartImages(parsed.parts, hasMapEntries(configMaps.partImages), book.requirePartImages);
 assertUniquePartImages(parsed.parts);
+assertPartImagesDoNotReuseCover(parsed.parts, book.coverImage);
 const partNumbers = new Map(parsed.parts.map((part, index) => [part.id, index + 1]));
 
 for (const chapter of parsed.chapters) {
@@ -410,6 +441,7 @@ function themeCss() {
   --text-page-margin-inner: 0.86in;
   --text-page-margin-outer: 0.86in;
   --text-column-gap: 0.54in;
+  --short-single-width: 7.54in;
   --paragraph-indent: 0.9em;
 }`;
 }
@@ -563,7 +595,7 @@ function renderPartDivider(part, index) {
 
 function renderChapterOpener(chapter) {
   return `
-<section class="page chapter-opener" id="${chapter.id}" aria-label="${escapeHtml(chapter.title)} opener">
+<section class="page chapter-opener" id="${chapter.id}-opener" data-allow-opening-spread="true" aria-label="${escapeHtml(chapter.title)} opener">
   <div class="page-inner">
     <p class="chapter-kicker no-indent">${chapter.number === "Introduction" ? "Introduction" : `Chapter ${chapter.number}`}</p>
     <h1 class="chapter-title">${escapeHtml(chapter.title)}</h1>
@@ -632,7 +664,7 @@ function renderBook() {
       currentPartId = chapter.part.id;
       body.push(renderPartDivider(chapter.part, partNumbers.get(chapter.part.id) ?? 0));
     }
-    body.push(renderChapterOpener(chapter));
+    if (book.chapterOpeners) body.push(renderChapterOpener(chapter));
     body.push(`<div class="chapter-mount" data-chapter-id="${chapter.id}"></div>`);
   }
 
@@ -651,9 +683,9 @@ function renderBook() {
     <a href="cover-options.html">Cover options</a>
   </div>
   <main class="book-shell">
-    <article class="book" id="book">${body.join("\n")}</article>
+    <article class="book" id="book" data-require-part-images="${book.requirePartImages ? "true" : "false"}">${body.join("\n")}</article>
   </main>
-  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: parsed.chapters, bodyColumns: book.bodyColumns })}</script>
+  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: parsed.chapters, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages })}</script>
   <script>${clientScript()}</script>
 </body>
 </html>`;
@@ -712,6 +744,32 @@ function overflows(frame) {
   return frame.scrollHeight > frame.clientHeight + 1 || frame.scrollWidth > frame.clientWidth + 1;
 }
 
+const SHORT_SINGLE_CHAR_LIMIT = ${SHORT_SINGLE_CHAR_LIMIT};
+
+function frameText(frame) {
+  return (frame?.textContent || "").replace(/\\s+/g, " ").trim();
+}
+
+function frameWordCount(frame) {
+  const text = frameText(frame);
+  return text ? text.split(/\\s+/).length : 0;
+}
+
+function hasRichFrameContent(frame) {
+  return Boolean(frame?.querySelector("figure, table, .diagram-card, .comparison-diagram, .callout, .span-all"));
+}
+
+function applyShortSingleMeasure(page, frame) {
+  const chars = frameText(frame).length;
+  if (!page || !frame || chars === 0 || chars > SHORT_SINGLE_CHAR_LIMIT || hasRichFrameContent(frame)) return false;
+  page.classList.add("text-short-single");
+  if (overflows(frame)) {
+    page.classList.remove("text-short-single");
+    return false;
+  }
+  return true;
+}
+
 function intersects(a, b) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
@@ -766,7 +824,10 @@ function paginateChapter(chapter, mount) {
     count += 1;
     page = document.createElement("section");
     page.className = "page text-page " + (bookData.bodyColumns || "text-two");
-    if (count === 1) page.dataset.firstTextPageFor = chapter.id;
+    if (count === 1) {
+      page.id = chapter.id;
+      page.dataset.firstTextPageFor = chapter.id;
+    }
     page.setAttribute("aria-label", chapter.title + (count > 1 ? " continued" : ""));
     const partLabel = chapter.part ? chapter.part.label : "Opening";
     const inner = document.createElement("div");
@@ -776,11 +837,7 @@ function paginateChapter(chapter, mount) {
     const kicker = appendText(header, "p", "chapter-kicker no-indent", chapter.number === "Introduction" ? "Introduction" : "Chapter " + chapter.number);
     kicker.append(" ");
     appendText(kicker, "span", "", partLabel);
-    const title = appendText(header, "h1", "text-page-title", chapter.title);
-    if (count > 1) {
-      title.append(" ");
-      appendText(title, "span", "continuation-mark", "continued");
-    }
+    appendText(header, "h1", "text-page-title", chapter.title);
     frame = document.createElement("div");
     frame.className = "text-frame";
     inner.appendChild(header);
@@ -803,9 +860,11 @@ function paginateChapter(chapter, mount) {
 
   const lastPage = pages[pages.length - 1];
   const lastFrame = lastPage?.querySelector(".text-frame");
-  const lastFrameWords = lastFrame?.textContent.trim().split(/\\s+/).filter(Boolean).length ?? 0;
-  if (lastPage && lastFrame && lastFrameWords < 640 && !overflows(lastFrame)) {
-    addTailFurniture(chapter, lastPage, lastFrame);
+  if (lastPage && lastFrame) {
+    applyShortSingleMeasure(lastPage, lastFrame);
+    if (frameWordCount(lastFrame) < 640 && !overflows(lastFrame)) {
+      addTailFurniture(chapter, lastPage, lastFrame);
+    }
   }
 }
 
