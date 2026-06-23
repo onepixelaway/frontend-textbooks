@@ -200,6 +200,17 @@ async function renderedReport(page) {
       return coverAssetUrls.size > 0;
     }
 
+    function requiresDiagrams() {
+      const policyNode = document.querySelector("[data-require-diagrams]");
+      const attrPolicy = explicitBoolean(policyNode?.dataset.requireDiagrams);
+      if (attrPolicy !== null) return attrPolicy;
+
+      const dataPolicy = explicitBoolean(embeddedBookData().requireDiagrams);
+      if (dataPolicy !== null) return dataPolicy;
+
+      return false;
+    }
+
     function normalizeText(value) {
       return String(value || "")
         .replace(/\s+/g, " ")
@@ -311,6 +322,34 @@ async function renderedReport(page) {
           !item.isSparseRows);
     }
 
+    function diagramElementsFor(pages) {
+      const diagramTerms = /\b(diagram|map|matrix|taxonomy|anatomy|system|process|workflow|framework|canvas|loop|timeline|flow|comparison|decision)\b/i;
+      const candidates = [
+        ...document.querySelectorAll(".diagram-page, .anatomy-page, .taxonomy-page, .loop-page, .canvas-page, .process-page, .system-map, .matrix, .comparison-diagram, .diagram-card, .generated-diagram, .canvas-grid, .framework-grid, .process-map"),
+        ...document.querySelectorAll("figure")
+      ];
+      const unique = [...new Set(candidates)].filter((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const page = node.closest(".page");
+        if (!page || page.classList.contains("cover") || page.classList.contains("part-divider") || page.classList.contains("option-cover")) return false;
+        const descriptor = [
+          node.className,
+          node.getAttribute("aria-label"),
+          node.querySelector("figcaption")?.textContent,
+          node.querySelector("title")?.textContent
+        ].join(" ");
+        return diagramTerms.test(descriptor) || Boolean(node.querySelector("svg"));
+      });
+      return unique.map((node) => {
+        const page = node.closest(".page");
+        return {
+          page: pageLabel(page, pages.indexOf(page)),
+          className: node.className || node.tagName.toLowerCase(),
+          label: normalizeText(node.getAttribute("aria-label") || node.querySelector("figcaption")?.textContent || node.querySelector("title")?.textContent || pageLabel(page, pages.indexOf(page))).slice(0, 160)
+        };
+      });
+    }
+
     const pages = [...document.querySelectorAll(".page")];
     const frames = [...document.querySelectorAll(".text-frame")];
     const overflowFrames = frames.filter((frame) => frame.scrollHeight > frame.clientHeight + 1 || frame.scrollWidth > frame.clientWidth + 1);
@@ -362,6 +401,8 @@ async function renderedReport(page) {
     const unrequestedOpeningPages = unrequestedOpeningPagesFor(pages);
     const shortTwoColumnPages = shortTwoColumnPagesFor(pages);
     const sparseItemColumnGrids = sparseItemColumnGridsFor(pages);
+    const diagramElements = diagramElementsFor(pages);
+    const requireDiagrams = requiresDiagrams();
     const text = document.body.innerText.replace(/\s+/g, " ").trim();
     return {
       ready: window.__BOOK_READY !== false,
@@ -376,6 +417,9 @@ async function renderedReport(page) {
       textOnlyPartDividers,
       duplicatePartDividerAssets,
       requirePartImages,
+      requireDiagrams,
+      diagramElements,
+      diagramCount: diagramElements.length,
       repeatedOpeningExcerpts,
       unrequestedOpeningPages,
       shortTwoColumnPages,
@@ -411,6 +455,10 @@ const reportFailureRules = [
   countFailure("coverAssetReuses", "interior page asset(s) reuse the cover image"),
   countFailure("textOnlyPartDividers", "part divider(s) are missing generated image assets"),
   countFailure("duplicatePartDividerAssets", "duplicated part-divider image asset(s)"),
+  {
+    failed: (report) => report.requireDiagrams && reportCount(report, "diagramElements") === 0,
+    message: () => "required diagram policy is enabled, but no diagrams or diagram-like tools were found"
+  },
   countFailure("repeatedOpeningExcerpts", "opening spread excerpt(s) repeat on the following body page"),
   countFailure("unrequestedOpeningPages", "unrequested opening page(s)"),
   countFailure("shortTwoColumnPages", "short text page(s) should use text-short-single instead of sparse two-column layout"),

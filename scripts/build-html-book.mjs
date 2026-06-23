@@ -55,6 +55,7 @@ book.json fields:
                with the default band, split-cover art slot is ${LETTER_WIDTH_IN}in x ${(LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN).toFixed(2)}in, aspect ${(LETTER_WIDTH_IN / (LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN)).toFixed(2)}:1
   coverBandHeight optional inches for the bottom cover band, default 3.55
   requirePartImages optional boolean; defaults to true when coverImage is set and the manuscript has parts
+  requireDiagrams optional boolean; defaults to true for designed nonfiction, false for plain/literary reader editions
   chapterOpeners optional boolean; default false. When false, chapters start directly on text pages.
   chapterClosers optional object keyed by chapter id, title, or number for generated chapter-close copy
   partImages   optional object keyed by part id, title, label, or number for generated part-divider art; if provided, must cover every part and use unique values
@@ -141,6 +142,15 @@ function booleanValue(value, field, fallback) {
     if (["false", "no", "0"].includes(text)) return false;
   }
   throw new Error(`${field} must be a boolean.`);
+}
+
+function defaultRequireDiagrams(config) {
+  const style = plainText(config.style ?? "").toLowerCase();
+  const type = plainText(config.bookType ?? "").toLowerCase();
+  const title = plainText(config.title ?? "").toLowerCase();
+  const combined = `${style} ${type} ${title}`;
+  if (/\b(plain|literary|reader|novel|fiction|poetry|memoir|essay collection)\b/.test(combined)) return false;
+  return true;
 }
 
 function normalizeMap(value, field, cleanValue = plainText) {
@@ -298,6 +308,7 @@ const book = {
   coverImage,
   coverBandHeight: numberInRange(config.coverBandHeight, DEFAULT_COVER_BAND_HEIGHT_IN, 2.8, 4.4),
   requirePartImages: booleanValue(config.requirePartImages, "requirePartImages", Boolean(coverImage && parsed.parts.length)),
+  requireDiagrams: booleanValue(config.requireDiagrams, "requireDiagrams", defaultRequireDiagrams(config)),
   chapterOpeners: booleanValue(config.chapterOpeners, "chapterOpeners", false),
   style: enumValue(config.style, "style", STYLE_NAMES, "default"),
   bodyColumns: enumValue(config.bodyColumns, "bodyColumns", BODY_COLUMN_CLASSES, "text-two")
@@ -683,9 +694,9 @@ function renderBook() {
     <a href="cover-options.html">Cover options</a>
   </div>
   <main class="book-shell">
-    <article class="book" id="book" data-require-part-images="${book.requirePartImages ? "true" : "false"}">${body.join("\n")}</article>
+    <article class="book" id="book" data-require-part-images="${book.requirePartImages ? "true" : "false"}" data-require-diagrams="${book.requireDiagrams ? "true" : "false"}">${body.join("\n")}</article>
   </main>
-  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: parsed.chapters, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages })}</script>
+  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: parsed.chapters, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages, requireDiagrams: book.requireDiagrams })}</script>
   <script>${clientScript()}</script>
 </body>
 </html>`;
