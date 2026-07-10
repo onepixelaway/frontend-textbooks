@@ -12,11 +12,11 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 
 - **Print-Ready PDF Output** - Exports US Letter PDFs with page-safe CSS, printed backgrounds, and fixed-format designed pages.
 - **HTML First** - Produces a browser-readable HTML book before exporting the PDF, so the artifact stays inspectable and editable.
-- **Manuscript Preservation** - Defaults to preserving at least 90% of the source text instead of summarizing chapters away.
+- **Enforced Manuscript Preservation** - Tracks stable source blocks and fails verification below 90% coverage instead of merely estimating preservation.
 - **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, two-column reading pages, visual plates, model cards, diagrams, and chapter closers.
 - **Coffee-Table Feel When Appropriate** - Encourages image-led section dividers, spacious editorial pages, generated artwork, and strong cover routes when the manuscript calls for a more collectible book.
 - **Reusable Scaffold** - Includes a Markdown-to-book scaffold with cover options, browser-side pagination, chapter-close furniture, generated part images, mobile collapse behavior, and overflow assertions.
-- **Verification Scripts** - Provides Playwright-backed rendered-state checks for page count, text-frame overflow, tail-furniture overlap, screenshots, and readiness-gated PDF export.
+- **Verification Scripts** - Provides Playwright-backed checks for readiness, allowlisted assets, source coverage, desktop/mobile overflow, every rendered page, and final PDF structure.
 
 ## Example Output
 
@@ -41,6 +41,9 @@ Clone this repository into your Codex skills directory:
 
 ```bash
 git clone https://github.com/onepixelaway/frontend-textbooks.git ~/.codex/skills/frontend-textbooks
+cd ~/.codex/skills/frontend-textbooks
+npm ci
+npm run setup:browsers
 ```
 
 Then ask Codex to use the `frontend-textbooks` skill when you want to turn manuscript text into a designed book and PDF.
@@ -51,6 +54,9 @@ Copy or clone the skill into Claude Code's skills directory:
 
 ```bash
 git clone https://github.com/onepixelaway/frontend-textbooks.git ~/.claude/skills/frontend-textbooks
+cd ~/.claude/skills/frontend-textbooks
+npm ci
+npm run setup:browsers
 ```
 
 Then use it as a standalone skill by asking Claude Code to use `frontend-textbooks`.
@@ -71,6 +77,8 @@ The skill file tells the agent when to load:
 - `animation-patterns.md`
 - `references/pdf-optimization.md`
 - `scripts/`
+
+Bundled commands resolve from the installed skill directory, so book inputs and outputs can remain in any workspace. Runtime packages are pinned in `package-lock.json`; the browser runner never installs tools on demand.
 
 ## Usage
 
@@ -113,6 +121,9 @@ frontend-textbooks/
   page-base.css
   html-template.md
   animation-patterns.md
+  package.json
+  package-lock.json
+  .github/workflows/ci.yml
   references/
     pdf-optimization.md
   themes/
@@ -123,12 +134,14 @@ frontend-textbooks/
     index.mjs
   scripts/
     build-html-book.mjs
+    book-browser.mjs
     export-pdf.sh
     export-ready-pdf.sh
     verify-html-book.sh
     verify-rendered-book.sh
     inspect-pdf.sh
-    deploy.sh
+    run-book-browser.sh
+  tests/
 ```
 
 ## Design Philosophy
@@ -138,6 +151,7 @@ Frontend Textbooks treats books as designed systems:
 - Preserve the manuscript.
 - Let HTML be the editable source.
 - Verify the PDF, not just the browser.
+- Keep publishing and hosting provider choices outside the book-production toolchain.
 - Make covers sell the book.
 - Make diagrams explain before they decorate.
 - Own whitespace.

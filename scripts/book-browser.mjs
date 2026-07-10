@@ -1,30 +1,17 @@
 #!/usr/bin/env node
-import { createServer } from "node:http";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { installPageGuards, loadBook, withServer } from "./lib/browser-runtime.mjs";
+import { createStaticAssetContext } from "./lib/static-assets.mjs";
+import { validatePdfStructure } from "./lib/pdf-structure.mjs";
 
 const SHORT_SINGLE_CHAR_LIMIT = 1300;
 const LONG_FLOW_WORD_LIMIT = 1400;
 const NARROW_FLOW_WORD_LIMIT = 250;
 const NARROW_FLOW_MEASURE_IN = 3.75;
-const mimeTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".svg": "image/svg+xml",
-  ".webp": "image/webp",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".otf": "font/otf"
-};
-
 function usage() {
   console.error(`Usage:
   node book-browser.mjs export --html <index.html> --pdf <output.pdf> [--wait networkidle|ready]
@@ -53,80 +40,28 @@ function parseArgs(argv) {
 }
 
 function htmlContext(htmlPath) {
-  const html = resolve(htmlPath);
-  return {
-    htmlPath: html,
-    serveDir: dirname(html),
-    htmlFile: basename(html)
-  };
+  const context = createStaticAssetContext(htmlPath);
+  return { ...context, htmlPath: context.entryReal };
 }
 
-function safeJoin(root, htmlFile, requestPath) {
-  const decoded = decodeURIComponent((requestPath || "/").split("?")[0]);
-  const relative = decoded === "/" ? htmlFile : decoded.replace(/^\/+/, "");
-  const rootPath = resolve(root);
-  const full = resolve(join(rootPath, relative));
-  if (full !== rootPath && !full.startsWith(`${rootPath}/`)) {
-    throw new Error("Blocked path outside serve directory");
-  }
-  return full;
-}
-
-async function withServer(context, callback) {
-  const server = createServer((req, res) => {
-    try {
-      const filePath = safeJoin(context.serveDir, context.htmlFile, req.url || "/");
-      const content = readFileSync(filePath);
-      res.writeHead(200, { "Content-Type": mimeTypes[extname(filePath).toLowerCase()] || "application/octet-stream" });
-      res.end(content);
-    } catch {
-      res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("Not found");
-    }
-  });
-  const port = await new Promise((resolvePort) => server.listen(0, () => resolvePort(server.address().port)));
-  try {
-    return await callback(`http://127.0.0.1:${port}/`);
-  } finally {
-    server.close();
-  }
-}
-
-async function loadBook(page, url, waitMode) {
-  const waitUntil = waitMode === "networkidle" ? "networkidle" : "domcontentloaded";
-  await page.goto(url, { waitUntil, timeout: 45000 });
-  await page.evaluate(async () => {
-    await Promise.race([
-      document.fonts?.ready ?? Promise.resolve(),
-      new Promise((resolve) => setTimeout(resolve, 6000))
-    ]);
-    await Promise.all([...document.images].map((img) => {
-      if (img.complete) return Promise.resolve();
-      return new Promise((resolveImage) => {
-        img.addEventListener("load", resolveImage, { once: true });
-        img.addEventListener("error", resolveImage, { once: true });
-      });
-    }));
-  });
-
-  const shouldWaitForBookReady = await page.evaluate(() => {
-    if (!document.getElementById("book-data")) return false;
-    if (window.__BOOK_READY === true || window.__BOOK_READY === false) return true;
-    return [...document.scripts].some((script) => script.textContent.includes("__BOOK_READY"));
-  });
-  if (shouldWaitForBookReady) {
-    await page.waitForFunction(() => window.__BOOK_READY === true || window.__BOOK_READY === false, null, { timeout: 60000 });
-  }
-}
-
-async function renderedReport(page) {
-  return await page.evaluate((limits) => {
+async function renderedReport(page, diagnostics = {}) {
+  return await page.evaluate(async ({ limits, diagnostics }) => {
     const {
       shortSingleCharLimit,
       longFlowWordLimit,
       narrowFlowWordLimit,
       narrowFlowMeasureIn
     } = limits;
+    const bookDataNode = document.getElementById("book-data");
+    let parsedBookData = {};
+    let bookDataError = null;
+    if (bookDataNode) {
+      try {
+        parsedBookData = JSON.parse(bookDataNode.textContent || "{}");
+      } catch (error) {
+        bookDataError = `Invalid #book-data JSON: ${error.message}`;
+      }
+    }
 
     function intersects(a, b) {
       return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
@@ -190,13 +125,7 @@ async function renderedReport(page) {
     }
 
     function embeddedBookData() {
-      const node = document.getElementById("book-data");
-      if (!node) return {};
-      try {
-        return JSON.parse(node.textContent || "{}");
-      } catch {
-        return {};
-      }
+      return parsedBookData;
     }
 
     function requiresPartDividerImages(coverAssetUrls) {
@@ -232,6 +161,189 @@ async function renderedReport(page) {
     function wordCountText(value) {
       const text = normalizeText(value);
       return text ? text.split(/\s+/).length : 0;
+    }
+
+    function sourceTextForNode(node) {
+      if (!node) return "";
+      const extras = [...node.querySelectorAll("img[alt]")].map((image) => image.getAttribute("alt") || "");
+      return normalizeText([node.innerText || node.textContent || "", ...extras].join(" "));
+    }
+
+    function orderedCoveredTokenCount(expected, actual) {
+      const expectedTokens = normalizeText(expected).toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      const actualTokens = normalizeText(actual).toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      let actualIndex = 0;
+      let covered = 0;
+      for (const token of expectedTokens) {
+        while (actualIndex < actualTokens.length && actualTokens[actualIndex] !== token) actualIndex += 1;
+        if (actualIndex >= actualTokens.length) break;
+        covered += 1;
+        actualIndex += 1;
+      }
+      return covered;
+    }
+
+    async function sha256Text(value) {
+      const bytes = new TextEncoder().encode(value);
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function sourcePreservationFor() {
+      const source = embeddedBookData().sourceManifest;
+      const manifestSource = diagnostics.manifestSource;
+      const manifestRequiresSource = Number.isFinite(Number(manifestSource?.wordCount));
+      if (!source) {
+        return manifestRequiresSource
+          ? { required: true, ratio: 0, threshold: Number(manifestSource.threshold) || 0.9, errors: ["Build manifest declares source text but #book-data has no sourceManifest"] }
+          : { required: false, errors: [] };
+      }
+      const errors = [];
+      const threshold = Number(source.threshold);
+      const blocks = Array.isArray(source.blocks) ? source.blocks : [];
+      if (!(threshold > 0 && threshold <= 1)) errors.push("sourceManifest.threshold must be greater than 0 and at most 1");
+      if (!blocks.length) errors.push("sourceManifest.blocks must contain at least one source block");
+      const manifestBlocks = Array.isArray(manifestSource?.blocks) ? manifestSource.blocks : null;
+      const manifestBlocksById = new Map((manifestBlocks || []).map((block) => [String(block?.id || ""), block]));
+      if (manifestBlocks && manifestBlocksById.size !== manifestBlocks.length) {
+        errors.push("Build manifest source.blocks contains duplicate IDs");
+      }
+      const nodes = [...document.querySelectorAll("[data-source-block-id]")];
+      const nodesBySourceId = new Map();
+      for (const node of nodes) {
+        const id = node.dataset.sourceBlockId;
+        if (!id) continue;
+        const matching = nodesBySourceId.get(id) || [];
+        matching.push(node);
+        nodesBySourceId.set(id, matching);
+      }
+      const missingBlocks = [];
+      const blockCoverage = [];
+      let declaredWords = 0;
+      let coveredWords = 0;
+      const embeddedIds = new Set();
+      for (const block of blocks) {
+        const id = String(block?.id || "").trim();
+        const manifestNormalizedText = String(block?.text ?? block?.expectedText ?? "").normalize("NFC").replace(/\s+/gu, " ").trim();
+        const expected = normalizeText(manifestNormalizedText);
+        const words = Number(block?.words ?? block?.wordCount ?? wordCountText(expected));
+        if (!id || !expected || !Number.isFinite(words) || words <= 0) {
+          errors.push(`Invalid source manifest block: ${id || "missing id"}`);
+          continue;
+        }
+        if (embeddedIds.has(id)) errors.push(`Duplicate embedded source block ID: ${id}`);
+        embeddedIds.add(id);
+        const computedWords = wordCountText(expected);
+        if (words !== computedWords) {
+          errors.push(`Source block ${id} wordCount (${words}) does not match its text (${computedWords})`);
+        }
+        const computedHash = await sha256Text(manifestNormalizedText);
+        if (block.sha256 && block.sha256 !== computedHash) {
+          errors.push(`Source block ${id} sha256 does not match its expected text`);
+        }
+        if (manifestBlocks) {
+          const external = manifestBlocksById.get(id);
+          if (!external) {
+            errors.push(`Source block ${id} is missing from the build manifest inventory`);
+          } else if (external.sha256 !== computedHash || Number(external.wordCount) !== computedWords) {
+            errors.push(`Source block ${id} does not match the build manifest inventory`);
+          }
+        }
+        declaredWords += words;
+        const matching = nodesBySourceId.get(id) || [];
+        if (!matching.length) missingBlocks.push(id);
+        const actual = matching.map(sourceTextForNode).join(" ");
+        const expectedTokens = Math.max(1, wordCountText(expected));
+        const tokenRatio = Math.min(1, orderedCoveredTokenCount(expected, actual) / expectedTokens);
+        const blockCovered = Math.min(words, Math.round(words * tokenRatio));
+        coveredWords += blockCovered;
+        blockCoverage.push({ id, words, coveredWords: blockCovered, ratio: Number(tokenRatio.toFixed(4)) });
+      }
+      if (manifestBlocks && manifestBlocks.length !== embeddedIds.size) {
+        errors.push(`Embedded source block count (${embeddedIds.size}) does not match the build manifest (${manifestBlocks.length})`);
+      }
+      const totalWords = Number(source.totalWords);
+      if (!Number.isFinite(totalWords) || totalWords <= 0) {
+        errors.push("sourceManifest.totalWords must be a positive number");
+      } else if (declaredWords !== totalWords) {
+        errors.push(`sourceManifest.totalWords (${totalWords}) does not match block words (${declaredWords})`);
+      }
+      if (manifestRequiresSource && Number(manifestSource.wordCount) !== totalWords) {
+        errors.push(`Build manifest source.wordCount (${manifestSource.wordCount}) does not match embedded totalWords (${totalWords})`);
+      }
+      if (manifestRequiresSource && Number(manifestSource.threshold) !== threshold) {
+        errors.push(`Build manifest source.threshold (${manifestSource.threshold}) does not match embedded threshold (${threshold})`);
+      }
+      if (manifestRequiresSource && manifestSource.sha256 && manifestSource.sha256 !== source.sha256) {
+        errors.push("Build manifest source.sha256 does not match the embedded source manifest");
+      }
+      const denominator = totalWords > 0 ? totalWords : declaredWords;
+      return {
+        required: true,
+        threshold,
+        totalWords: denominator,
+        coveredWords,
+        ratio: denominator > 0 ? Number((coveredWords / denominator).toFixed(4)) : 0,
+        missingBlocks,
+        blockCoverage,
+        errors
+      };
+    }
+
+    function isImageOnlyBook() {
+      const root = document.querySelector("[data-image-only]");
+      const meta = document.querySelector('meta[name="book-image-only"]');
+      return explicitBoolean(root?.dataset.imageOnly) === true || explicitBoolean(meta?.content) === true;
+    }
+
+    function fixedPageOverflowsFor(pages) {
+      return pages.flatMap((page, index) => {
+        const reasons = [];
+        const pageRect = page.getBoundingClientRect();
+        if (matchMedia("print").matches && pageRect.height > 1057) {
+          reasons.push(`fixed page is ${Math.round(pageRect.width)} x ${Math.round(pageRect.height)}px, larger than Letter`);
+        }
+        if (page.scrollHeight > page.clientHeight + 1) reasons.push(`vertical ${page.scrollHeight - page.clientHeight}px`);
+        if (page.scrollWidth > page.clientWidth + 1) reasons.push(`horizontal ${page.scrollWidth - page.clientWidth}px`);
+        const inner = page.querySelector(":scope > .page-inner");
+        if (inner && inner.scrollHeight > inner.clientHeight + 1) reasons.push(`inner vertical ${inner.scrollHeight - inner.clientHeight}px`);
+        if (inner && inner.scrollWidth > inner.clientWidth + 1) reasons.push(`inner horizontal ${inner.scrollWidth - inner.clientWidth}px`);
+        const clipped = [...page.querySelectorAll("*")].filter((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && (
+            rect.left < pageRect.left - 1 || rect.right > pageRect.right + 1 ||
+            rect.top < pageRect.top - 1 || rect.bottom > pageRect.bottom + 1
+          );
+        });
+        if (clipped.length) {
+          reasons.push(`clipped descendants: ${clipped.slice(0, 3).map((node) => node.id || node.className || node.tagName.toLowerCase()).join(", ")}`);
+        }
+        return reasons.length ? [{ page: pageLabel(page, index), reasons }] : [];
+      });
+    }
+
+    function mobileLayoutFor(pages) {
+      if (!diagnostics.expectedMobile) return { horizontalOverflows: [], columnFailures: [] };
+      const horizontalOverflows = [];
+      if (window.innerWidth >= 600) {
+        horizontalOverflows.push({ page: "viewport metadata", width: window.innerWidth, viewport: 390 });
+      }
+      if (document.documentElement.scrollWidth > window.innerWidth + 1) {
+        horizontalOverflows.push({ page: "document", width: document.documentElement.scrollWidth, viewport: window.innerWidth });
+      }
+      pages.forEach((page, index) => {
+        const rect = page.getBoundingClientRect();
+        if (page.scrollWidth > page.clientWidth + 1 || rect.left < -1 || rect.right > window.innerWidth + 1) {
+          horizontalOverflows.push({ page: pageLabel(page, index), width: Math.max(page.scrollWidth, Math.ceil(rect.width)), viewport: window.innerWidth });
+        }
+      });
+      const columnFailures = [...document.querySelectorAll(".text-frame")]
+        .map((frame, index) => ({
+          frame: frame.closest(".page")?.id || `text frame ${index + 1}`,
+          columns: getComputedStyle(frame).columnCount
+        }))
+        .filter((item) => Number.parseInt(item.columns, 10) > 1);
+      return { horizontalOverflows, columnFailures };
     }
 
     function allowsFlowingProse(node) {
@@ -466,12 +578,37 @@ async function renderedReport(page) {
     const diagramElements = diagramElementsFor(pages);
     const requireDiagrams = requiresDiagrams();
     const text = document.body.innerText.replace(/\s+/g, " ").trim();
+    const pageText = normalizeText(pages.map((page) => page.innerText || page.textContent).join(" "));
+    const imageOnly = isImageOnlyBook();
+    const customBookFailures = [];
+    if (!pages.length && !chapterFlowSections.some((section) => section.allowFlowingProse)) {
+      customBookFailures.push("Book must contain at least one .page or an explicitly allowed flowing-prose section");
+    }
+    const customText = pages.length ? pageText : normalizeText(document.body.innerText || document.body.textContent);
+    if (!bookDataNode && !imageOnly && wordCountText(customText) === 0) {
+      customBookFailures.push("Custom books must contain nonzero text unless data-image-only is explicitly true");
+    }
+    if (imageOnly && !document.querySelector("img, svg, canvas, video, [style*='background']")) {
+      customBookFailures.push("Image-only books must contain at least one visual asset");
+    }
+    const sourcePreservation = await sourcePreservationFor();
+    const fixedPageOverflows = fixedPageOverflowsFor(pages);
+    const mobileLayout = mobileLayoutFor(pages);
     return {
-      ready: window.__BOOK_READY !== false,
+      ready: bookDataNode ? window.__BOOK_READY === true : true,
       error: window.__BOOK_ERROR || null,
+      bookDataError,
+      diagnostics,
+      media: matchMedia("print").matches ? "print" : (window.innerWidth < 600 ? "mobile" : "screen"),
       pages: pages.length,
+      printSheets: matchMedia("print").matches
+        ? Math.max(1, Math.ceil((document.querySelector(".book")?.scrollHeight || document.body.scrollHeight) / (11 * 96) - 0.001))
+        : pages.length,
       frames: frames.length,
       overflowFrames: overflowFrames.length,
+      fixedPageOverflows,
+      mobileHorizontalOverflows: mobileLayout.horizontalOverflows,
+      mobileColumnFailures: mobileLayout.columnFailures,
       tailOverlaps: tailOverlaps.length,
       missingTocTargets,
       continuationMarks,
@@ -491,14 +628,20 @@ async function renderedReport(page) {
       missingMeasuredTextPages,
       unmeasuredChapterFlows,
       narrowChapterFlows,
+      imageOnly,
+      customBookFailures,
+      sourcePreservation,
       words: text ? text.split(/\s+/).length : 0,
       customPages: [...document.querySelectorAll(".custom-feature")].map((node) => node.id || node.getAttribute("aria-label") || "custom-feature")
     };
   }, {
-    shortSingleCharLimit: SHORT_SINGLE_CHAR_LIMIT,
-    longFlowWordLimit: LONG_FLOW_WORD_LIMIT,
-    narrowFlowWordLimit: NARROW_FLOW_WORD_LIMIT,
-    narrowFlowMeasureIn: NARROW_FLOW_MEASURE_IN
+    limits: {
+      shortSingleCharLimit: SHORT_SINGLE_CHAR_LIMIT,
+      longFlowWordLimit: LONG_FLOW_WORD_LIMIT,
+      narrowFlowWordLimit: NARROW_FLOW_WORD_LIMIT,
+      narrowFlowMeasureIn: NARROW_FLOW_MEASURE_IN
+    },
+    diagnostics
   });
 }
 
@@ -520,7 +663,30 @@ const reportFailureRules = [
     failed: (report) => !report.ready,
     message: (report) => `Book did not become ready: ${report.error || "unknown error"}`
   },
+  {
+    failed: (report) => Boolean(report.bookDataError),
+    message: (report) => report.bookDataError
+  },
+  ...["pageErrors", "blockedRequests", "requestFailures", "httpFailures", "assetFailures", "readinessFailures"].map((field) => ({
+    failed: (report) => (report.diagnostics?.[field]?.length || 0) > 0,
+    message: (report) => report.diagnostics[field][0]
+  })),
+  {
+    failed: (report) => (report.customBookFailures?.length || 0) > 0,
+    message: (report) => report.customBookFailures[0]
+  },
+  {
+    failed: (report) => (report.sourcePreservation?.errors?.length || 0) > 0,
+    message: (report) => `Invalid source preservation contract: ${report.sourcePreservation.errors[0]}`
+  },
+  {
+    failed: (report) => report.sourcePreservation?.required && report.sourcePreservation.ratio < report.sourcePreservation.threshold,
+    message: (report) => `Source preservation coverage ${(report.sourcePreservation.ratio * 100).toFixed(1)}% is below the ${(report.sourcePreservation.threshold * 100).toFixed(1)}% threshold`
+  },
   countFailure("overflowFrames", "text frame(s) overflow"),
+  countFailure("fixedPageOverflows", "fixed page(s) overflow or clip content"),
+  countFailure("mobileHorizontalOverflows", "mobile horizontal overflow(s)"),
+  countFailure("mobileColumnFailures", "mobile text frame(s) remain multi-column"),
   countFailure("tailOverlaps", "tail furniture block(s) overlap text"),
   countFailure("missingTocTargets", "table-of-contents page reference(s) are missing or blank"),
   countFailure("continuationMarks", "continuation marker(s) are visible in text-page titles"),
@@ -546,8 +712,8 @@ function reportFailures(report) {
     .map((rule) => rule.message(report));
 }
 
-async function assertReady(page) {
-  const report = await renderedReport(page);
+async function assertReady(page, diagnostics) {
+  const report = await renderedReport(page, diagnostics);
   const failures = reportFailures(report);
   if (failures.length) throw new Error(failures[0]);
   return report;
@@ -555,59 +721,122 @@ async function assertReady(page) {
 
 async function screenshotIfPresent(page, outputDir, name, selector) {
   const locator = page.locator(selector).first();
-  if (await locator.count()) {
-    await locator.screenshot({ path: join(outputDir, `${name}.png`) });
+  if (await locator.count() && await locator.isVisible()) {
+    await locator.screenshot({ path: join(outputDir, `${name}.png`), timeout: 8000 });
+  }
+}
+
+async function screenshotEveryPage(page, outputDir, prefix) {
+  const pages = page.locator(".page");
+  const count = await pages.count();
+  for (let index = 0; index < count; index += 1) {
+    const locator = pages.nth(index);
+    if (await locator.isVisible()) {
+      await locator.screenshot({
+        path: join(outputDir, `${prefix}-page-${String(index + 1).padStart(4, "0")}.png`),
+        timeout: 10000
+      });
+    }
   }
 }
 
 async function exportPdf(args) {
   const context = htmlContext(args.html);
   const outputPdf = resolve(args.pdf);
+  if (extname(outputPdf).toLowerCase() !== ".pdf") throw new Error("PDF output path must use a .pdf extension");
+  const protectedPaths = new Set([...context.allowedFiles].map((file) => resolve(context.rootReal, file)));
+  if (protectedPaths.has(outputPdf)) throw new Error("PDF output path must not overwrite the HTML entry or a declared book asset");
   mkdirSync(dirname(outputPdf), { recursive: true });
+  const temporaryPdf = join(dirname(outputPdf), `.${basename(outputPdf)}.${randomUUID()}.tmp.pdf`);
 
-  return await withServer(context, async (url) => {
+  return await withServer(context, async (url, origin) => {
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1200, height: 1600 }, deviceScaleFactor: 1 });
     try {
-      await loadBook(page, url, args.wait);
+      const diagnostics = await installPageGuards(page, context, origin);
+      await loadBook(page, url, args.wait, diagnostics);
+      diagnostics.manifestSource = context.manifest?.source ?? null;
       await page.emulateMedia({ media: "print" });
-      const readiness = await assertReady(page);
+      const readiness = await assertReady(page, diagnostics);
+      const sourceManifest = await page.evaluate(() => {
+        const node = document.getElementById("book-data");
+        if (!node) return null;
+        try {
+          return JSON.parse(node.textContent || "{}").sourceManifest || null;
+        } catch {
+          return null;
+        }
+      });
       await page.pdf({
-        path: outputPdf,
+        path: temporaryPdf,
         format: "Letter",
         printBackground: true,
         preferCSSPageSize: true,
         margin: { top: "0", right: "0", bottom: "0", left: "0" },
         displayHeaderFooter: false
       });
-      return { outputPdf, bytes: statSync(outputPdf).size, readiness };
+      await assertReady(page, diagnostics);
+      const pdf = validatePdfStructure(temporaryPdf, readiness.printSheets, {
+        requireText: readiness.words > 0 && !readiness.imageOnly,
+        sourceManifest
+      });
+      renameSync(temporaryPdf, outputPdf);
+      return { outputPdf, bytes: statSync(outputPdf).size, readiness, pdf };
     } finally {
+      rmSync(temporaryPdf, { force: true });
       await browser.close();
     }
   });
 }
 
-async function inspectViewport(browser, url, name, viewport, outputDir, waitMode) {
+async function inspectViewport(browser, context, url, origin, {
+  name,
+  viewport,
+  outputDir,
+  waitMode,
+  media = "screen"
+}) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 1, isMobile: viewport.width < 600 });
   try {
-    await loadBook(page, url, waitMode);
-    const report = await renderedReport(page);
-    await page.screenshot({ path: join(outputDir, `${name}-viewport.png`), fullPage: false });
-    await screenshotIfPresent(page, outputDir, `${name}-cover`, ".cover, .page");
-    await screenshotIfPresent(page, outputDir, `${name}-text-page`, ".text-page");
+    await page.emulateMedia({ media });
+    const diagnostics = await installPageGuards(page, context, origin);
+    await loadBook(page, url, waitMode, diagnostics);
+    diagnostics.manifestSource = context.manifest?.source ?? null;
+    diagnostics.expectedMobile = viewport.width < 600;
+    if (media === "screen") {
+      await page.screenshot({ path: join(outputDir, `${name}-viewport.png`), fullPage: false });
+      if (name === "desktop") {
+        await screenshotEveryPage(page, outputDir, "desktop");
+      } else {
+        await screenshotIfPresent(page, outputDir, `${name}-cover`, ".cover, .page");
+        const textPages = page.locator(".text-page");
+        const textPageCount = await textPages.count();
+        if (textPageCount > 0) {
+          await textPages.first().screenshot({ path: join(outputDir, `${name}-text-first.png`), timeout: 10000 });
+          await textPages.last().screenshot({ path: join(outputDir, `${name}-text-last.png`), timeout: 10000 });
+        }
+        const dividerCount = await page.locator(".part-divider").count();
+        for (let index = 0; index < dividerCount; index += 1) {
+          const divider = page.locator(".part-divider").nth(index);
+          if (await divider.isVisible()) {
+            await divider.screenshot({ path: join(outputDir, `mobile-part-${String(index + 1).padStart(3, "0")}.png`), timeout: 10000 });
+          }
+        }
+      }
+    }
 
-    const featureSelectors = await page.evaluate(() => {
+    const featureSelectors = media === "screen" ? await page.evaluate(() => {
       return [...document.querySelectorAll(".custom-feature, .canvas-page, .model-card-page, .anatomy-page, .taxonomy-page, .loop-page")]
         .slice(0, 8)
         .map((node, index) => {
           if (!node.id) node.id = `verified-feature-${index + 1}`;
           return `#${CSS.escape(node.id)}`;
         });
-    });
+    }) : [];
     for (let index = 0; index < featureSelectors.length; index += 1) {
       await screenshotIfPresent(page, outputDir, `${name}-feature-${String(index + 1).padStart(2, "0")}`, featureSelectors[index]);
     }
-    return report;
+    return await renderedReport(page, diagnostics);
   } finally {
     await page.close();
   }
@@ -617,26 +846,49 @@ async function verifyBook(args) {
   const context = htmlContext(args.html);
   const outputDir = resolve(args["output-dir"]);
   mkdirSync(outputDir, { recursive: true });
+  const ownedOutput = /^(?:desktop|mobile)-(?:viewport|cover|text-(?:first|last)|feature-\d+|page-\d+)\.png$|^mobile-part-\d+\.png$|^render-report\.json$/;
+  for (const name of readdirSync(outputDir)) {
+    if (ownedOutput.test(name)) rmSync(join(outputDir, name), { force: true });
+  }
 
-  return await withServer(context, async (url) => {
+  return await withServer(context, async (url, origin) => {
     const browser = await chromium.launch();
     try {
-      const [desktop, mobile] = await Promise.all([
-        inspectViewport(browser, url, "desktop", { width: 1200, height: 1600 }, outputDir, args.wait),
-        inspectViewport(browser, url, "mobile", { width: 390, height: 844 }, outputDir, args.wait)
+      const [desktop, print, mobile] = await Promise.all([
+        inspectViewport(browser, context, url, origin, {
+          name: "desktop",
+          viewport: { width: 1200, height: 1600 },
+          outputDir,
+          waitMode: args.wait
+        }),
+        inspectViewport(browser, context, url, origin, {
+          name: "print",
+          viewport: { width: 1200, height: 1600 },
+          outputDir,
+          waitMode: args.wait,
+          media: "print"
+        }),
+        inspectViewport(browser, context, url, origin, {
+          name: "mobile",
+          viewport: { width: 390, height: 844 },
+          outputDir,
+          waitMode: args.wait
+        })
       ]);
       const result = {
         html: context.htmlPath,
         htmlBytes: statSync(context.htmlPath).size,
         screenshots: outputDir,
         desktop,
+        print,
         mobile,
         failures: {
           desktop: reportFailures(desktop),
+          print: reportFailures(print),
           mobile: reportFailures(mobile)
         }
       };
-      if (result.failures.desktop.length || result.failures.mobile.length) {
+      if (result.failures.desktop.length || result.failures.print.length || result.failures.mobile.length) {
         result.failed = true;
       }
       writeFileSync(join(outputDir, "render-report.json"), JSON.stringify(result, null, 2));
@@ -647,7 +899,18 @@ async function verifyBook(args) {
   });
 }
 
-const args = parseArgs(process.argv.slice(2));
-const result = args.mode === "export" ? await exportPdf(args) : await verifyBook(args);
-console.log(JSON.stringify(result, null, 2));
-if (result.failed) process.exit(2);
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const result = args.mode === "export" ? await exportPdf(args) : await verifyBook(args);
+  console.log(JSON.stringify(result, null, 2));
+  if (result.failed) process.exitCode = 2;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  try {
+    await main();
+  } catch (error) {
+    console.error(`Book verification failed: ${error.message}`);
+    process.exitCode = 2;
+  }
+}

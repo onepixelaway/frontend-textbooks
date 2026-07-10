@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve, relative } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_THEME_NAME, STYLE_NAMES, getTheme, renderThemeFontLinks, themeColors, themeFontStack } from "../themes/index.mjs";
+import { parseManuscript, wordCount } from "./lib/manuscript.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(scriptDir, "..");
@@ -50,10 +51,79 @@ const config = JSON.parse(readFileSync(configPath, "utf8"));
 const manuscript = readFileSync(manuscriptPath, "utf8");
 const outputDir = resolve(config.outputDir ?? dirname(configPath));
 const outputHtml = config.outputHtml ?? "index.html";
+if (typeof outputHtml !== "string" || basename(outputHtml) !== outputHtml) {
+  throw new Error("outputHtml must be a single filename inside outputDir; nested paths are not supported.");
+}
+if (![".html", ".htm"].includes(extname(outputHtml).toLowerCase())) {
+  throw new Error("outputHtml must use an .html or .htm extension.");
+}
 const outputPath = resolve(outputDir, outputHtml);
+const coverOptionsPath = resolve(outputDir, "cover-options.html");
+const buildManifestPath = resolve(outputDir, "book-build-manifest.json");
+const buildSummaryPath = resolve(outputDir, "book-build-summary.json");
 const baseCss = readFileSync(resolve(skillDir, "page-base.css"), "utf8");
 
+const generatedPaths = new Map([
+  [outputPath, "outputHtml"],
+  [coverOptionsPath, "cover options"],
+  [buildManifestPath, "build manifest"],
+  [buildSummaryPath, "build summary"]
+]);
+if (generatedPaths.size !== 4) throw new Error("outputHtml collides with a reserved generated filename.");
+for (const [inputPath, label] of [[configPath, "configuration"], [manuscriptPath, "manuscript"]]) {
+  if (generatedPaths.has(inputPath)) {
+    throw new Error(`${generatedPaths.get(inputPath)} collides with the ${label} input: ${inputPath}`);
+  }
+}
+
 mkdirSync(outputDir, { recursive: true });
+
+function isOutsideDirectory(root, candidate) {
+  const path = relative(root, candidate);
+  return path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
+}
+
+function canonicalRelativeFile(root, candidate, label) {
+  if (isOutsideDirectory(root, candidate)) {
+    throw new Error(`${label} resolves outside outputDir: ${candidate}`);
+  }
+  if (existsSync(candidate)) {
+    const canonicalRoot = realpathSync(root);
+    const canonicalCandidate = realpathSync(candidate);
+    if (isOutsideDirectory(canonicalRoot, canonicalCandidate)) {
+      throw new Error(`${label} resolves outside outputDir through a symbolic link: ${candidate}`);
+    }
+  }
+  return relative(root, candidate).split(sep).join("/");
+}
+
+function localAssetManifestPath(value, label) {
+  const asset = trimmedText(value);
+  if (!asset) return null;
+  if (asset.startsWith("//")) throw new Error(`${label} uses a protocol-relative URL; use an explicit https:// URL.`);
+  if (/^https?:\/\//iu.test(asset) || /^data:image\//iu.test(asset)) return null;
+  if (/^[a-z][a-z\d+.-]*:/iu.test(asset)) {
+    throw new Error(`${label} uses an unsupported asset URL scheme.`);
+  }
+  const encodedPath = asset.replace(/\\/gu, "/").split(/[?#]/u, 1)[0];
+  let pathOnly;
+  try {
+    pathOnly = decodeURIComponent(encodedPath);
+  } catch {
+    throw new Error(`${label} contains invalid URL encoding.`);
+  }
+  if (pathOnly.includes("\0")) throw new Error(`${label} contains an invalid null byte.`);
+  const candidate = resolve(dirname(outputPath), pathOnly);
+  if (!existsSync(candidate)) throw new Error(`${label} does not exist: ${candidate}`);
+  if (!lstatSync(candidate).isFile()) throw new Error(`${label} must name a regular file: ${candidate}`);
+  if (generatedPaths.has(candidate)) {
+    throw new Error(`${label} collides with generated ${generatedPaths.get(candidate)}: ${candidate}`);
+  }
+  return canonicalRelativeFile(outputDir, candidate, label);
+}
+
+const manifestEntry = canonicalRelativeFile(outputDir, outputPath, "outputHtml");
+const manifestCoverOptions = canonicalRelativeFile(outputDir, coverOptionsPath, "coverOptions");
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -61,13 +131,6 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function inlineMarkdown(value) {
-  return escapeHtml(value)
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
 function plainText(value) {
@@ -158,114 +221,6 @@ function clipText(value, maxLength = 160) {
   return `${clipped || text.slice(0, maxLength).trim()}...`;
 }
 
-function slugify(value) {
-  return String(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function wordCount(value) {
-  const text = String(value ?? "").replace(/[#*_>`-]/g, " ").replace(/\s+/g, " ").trim();
-  return text ? text.split(/\s+/).length : 0;
-}
-
-function parseManuscript(markdown) {
-  const blocks = markdown.trim().split(/\n\s*\n/);
-  const parts = [];
-  const chapters = [];
-  let currentPart = null;
-  let currentChapter = null;
-  let chapterCounter = 0;
-
-  for (const rawBlock of blocks) {
-    const block = rawBlock.trim();
-    if (!block) continue;
-
-    if (/^##\s+Part\b/i.test(block)) {
-      const label = block.replace(/^##\s+/, "");
-      currentPart = {
-        id: slugify(label),
-        label: label.split(":")[0],
-        title: label.replace(/^Part\s+[IVXLC0-9]+:\s*/i, "")
-      };
-      parts.push(currentPart);
-      continue;
-    }
-
-    if (block.startsWith("## ")) {
-      const title = block.replace(/^##\s+/, "");
-      currentChapter = {
-        id: slugify(title) || "introduction",
-        number: /^introduction\b/i.test(title) ? "Introduction" : String(++chapterCounter),
-        sortNumber: chapterCounter,
-        title,
-        part: currentPart,
-        blocks: []
-      };
-      chapters.push(currentChapter);
-      continue;
-    }
-
-    if (block.startsWith("### ")) {
-      const heading = block.replace(/^###\s+/, "");
-      const match = heading.match(/^(\d+)\.\s*(.+)$/);
-      const number = match ? match[1] : String(++chapterCounter);
-      chapterCounter = Math.max(chapterCounter, Number(number) || chapterCounter);
-      currentChapter = {
-        id: `chapter-${String(number).padStart(2, "0")}`,
-        number,
-        sortNumber: Number(number) || chapterCounter,
-        title: match ? match[2] : heading,
-        part: currentPart,
-        blocks: []
-      };
-      chapters.push(currentChapter);
-      continue;
-    }
-
-    if (!currentChapter) {
-      currentChapter = {
-        id: "front-note",
-        number: "Opening",
-        sortNumber: -1,
-        title: "Opening",
-        part: null,
-        blocks: []
-      };
-      chapters.push(currentChapter);
-    }
-
-    if (block.startsWith("#### ")) {
-      currentChapter.blocks.push({ type: "h3", html: inlineMarkdown(block.replace(/^####\s+/, "")) });
-      continue;
-    }
-
-    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
-    const orderedLines = lines.length > 1 && lines.every((line) => /^\d+\.\s+/.test(line));
-    const bulletLines = lines.length > 1 && lines.every((line) => /^[-*]\s+/.test(line));
-
-    if (orderedLines) {
-      for (const line of lines) {
-        const [, marker, text] = line.match(/^(\d+)\.\s+(.+)$/);
-        currentChapter.blocks.push({ type: "numbered", marker, html: inlineMarkdown(text) });
-      }
-      continue;
-    }
-
-    if (bulletLines) {
-      for (const line of lines) {
-        currentChapter.blocks.push({ type: "bullet", html: inlineMarkdown(line.replace(/^[-*]\s+/, "")) });
-      }
-      continue;
-    }
-
-    currentChapter.blocks.push({ type: "p", html: inlineMarkdown(block.replace(/\n/g, " ")) });
-  }
-
-  return { parts, chapters };
-}
-
 const configMaps = {
   chapterClosers: normalizeMap(config.chapterClosers, "chapterClosers"),
   partImages: normalizeMap(config.partImages, "partImages", trimmedText)
@@ -291,9 +246,11 @@ const book = {
 };
 
 if (!book.title || !book.author) throw new Error("book.json must include non-empty title and author.");
+const matchingManuscriptTitle = parsed.metadata.find((entry) => entry.title === book.title);
 
 function firstParagraph(chapter) {
-  return chapter.blocks.find((block) => block.type === "p")?.html ?? "";
+  const block = chapter.blocks.find((candidate) => candidate.type === "p");
+  return block?.expectedText ?? plainText(block?.html ?? "");
 }
 
 function excerpt(chapter, words = 42) {
@@ -523,7 +480,7 @@ function renderTitlePage() {
   <div class="page-inner title-grid">
     <p class="chapter-kicker no-indent">${escapeHtml(book.bookType)}</p>
     <div>
-      <h1>${escapeHtml(book.title)}</h1>
+      <h1${matchingManuscriptTitle ? ` data-source-block-id="${escapeHtml(matchingManuscriptTitle.sourceBlockId)}"` : ""}>${escapeHtml(book.title)}</h1>
       ${book.subtitle ? `<p class="title-subtitle no-indent">${escapeHtml(book.subtitle)}</p>` : ""}
     </div>
     <p class="title-author no-indent">by ${escapeHtml(book.author)}</p>
@@ -559,7 +516,7 @@ function renderPartCopy(part, index) {
 function renderPartDivider(part, index) {
   if (part.image) {
     return `
-<section class="page part-divider has-part-image" id="${part.id}" aria-label="${escapeHtml(part.label)}">
+<section class="page part-divider has-part-image" id="${part.id}" data-source-block-id="${escapeHtml(part.sourceBlockId)}" aria-label="${escapeHtml(part.label)}">
   <div class="page-inner">
     <figure class="part-image-frame">
       <img src="${escapeHtml(part.image)}" alt="${escapeHtml(`Editorial image for ${part.title}`)}">
@@ -571,7 +528,7 @@ function renderPartDivider(part, index) {
 </section>`;
   }
   return `
-<section class="page part-divider" id="${part.id}" aria-label="${escapeHtml(part.label)}">
+<section class="page part-divider" id="${part.id}" data-source-block-id="${escapeHtml(part.sourceBlockId)}" aria-label="${escapeHtml(part.label)}">
   <div class="page-inner">
     ${renderPartCopy(part, index)}
   </div>
@@ -650,8 +607,13 @@ function renderBook() {
       body.push(renderPartDivider(chapter.part, partNumbers.get(chapter.part.id) ?? 0));
     }
     if (book.chapterOpeners) body.push(renderChapterOpener(chapter));
-    body.push(`<div class="chapter-mount" data-chapter-id="${chapter.id}"></div>`);
+    body.push(`<div class="chapter-mount" data-chapter-id="${chapter.id}"${chapter.sourceBlockId ? ` data-source-block-id="${escapeHtml(chapter.sourceBlockId)}"` : ""}></div>`);
   }
+
+  const clientChapters = parsed.chapters.map((chapter) => ({
+    ...chapter,
+    blocks: chapter.blocks.map(({ expectedText: _expectedText, ...block }) => block)
+  }));
 
   return `<!doctype html>
 <html lang="en">
@@ -670,7 +632,7 @@ function renderBook() {
   <main class="book-shell">
     <article class="book" id="book" data-require-part-images="${book.requirePartImages ? "true" : "false"}" data-require-diagrams="${book.requireDiagrams ? "true" : "false"}">${body.join("\n")}</article>
   </main>
-  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: parsed.chapters, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages, requireDiagrams: book.requireDiagrams })}</script>
+  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: clientChapters, sourceManifest: parsed.sourceManifest, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages, requireDiagrams: book.requireDiagrams })}</script>
   <script>${clientScript()}</script>
 </body>
 </html>`;
@@ -681,21 +643,19 @@ function clientScript() {
 const bookData = JSON.parse(document.getElementById("book-data").textContent);
 
 function blockNode(block) {
-  if (block.type === "h3") {
-    const node = document.createElement("h3");
-    node.innerHTML = block.html;
-    return node;
-  }
-  const node = document.createElement("p");
-  if (block.type === "numbered") {
-    node.className = "numbered-item";
-    node.innerHTML = "<span>" + block.marker + ".</span><span>" + block.html + "</span>";
-  } else if (block.type === "bullet") {
-    node.className = "bullet-item";
-    node.innerHTML = "<span>-</span><span>" + block.html + "</span>";
+  const template = document.createElement("template");
+  template.innerHTML = block.html;
+  let node;
+  const significantText = [...template.content.childNodes]
+    .filter((child) => child.nodeType === Node.TEXT_NODE)
+    .some((child) => child.textContent.trim());
+  if (template.content.children.length === 1 && !significantText) {
+    node = template.content.firstElementChild;
   } else {
-    node.innerHTML = block.html;
+    node = document.createElement("div");
+    node.appendChild(template.content);
   }
+  node.dataset.sourceBlockId = block.sourceBlockId;
   return node;
 }
 
@@ -711,7 +671,7 @@ function paginationUnits(nodes) {
   const units = [];
   for (let index = 0; index < nodes.length; index += 1) {
     const block = nodes[index];
-    if (block.matches("h3") && nodes[index + 1]) {
+    if (block.matches("h3, h4") && nodes[index + 1]) {
       const wrapper = document.createElement("div");
       wrapper.className = "keep-with-next";
       wrapper.appendChild(block);
@@ -898,9 +858,34 @@ try {
 }`;
 }
 
+const manifestFiles = [manifestEntry, manifestCoverOptions];
+const coverAsset = localAssetManifestPath(book.coverImage, "coverImage");
+if (coverAsset) manifestFiles.push(coverAsset);
+parsed.parts.forEach((part, index) => {
+  const asset = localAssetManifestPath(part.image, `partImages[${index + 1}]`);
+  if (asset) manifestFiles.push(asset);
+});
+parsed.assetReferences.forEach((reference, index) => {
+  const asset = localAssetManifestPath(reference, `manuscript image ${index + 1}`);
+  if (asset) manifestFiles.push(asset);
+});
+const allowlistedFiles = [...new Set(manifestFiles)];
+
 writeFileSync(outputPath, renderBook());
-writeFileSync(resolve(outputDir, "cover-options.html"), renderCoverOptions());
-writeFileSync(resolve(outputDir, "book-build-summary.json"), JSON.stringify({
+writeFileSync(coverOptionsPath, renderCoverOptions());
+writeFileSync(buildManifestPath, JSON.stringify({
+  schemaVersion: 1,
+  entry: manifestEntry,
+  coverOptions: manifestCoverOptions,
+  files: allowlistedFiles,
+  source: {
+    sha256: parsed.sourceManifest.sha256,
+    wordCount: parsed.sourceManifest.totalWords,
+    threshold: parsed.sourceManifest.threshold,
+    blocks: parsed.sourceManifest.blocks.map(({ id, kind, wordCount, sha256 }) => ({ id, kind, wordCount, sha256 }))
+  }
+}, null, 2));
+writeFileSync(buildSummaryPath, JSON.stringify({
   title: book.title,
   author: book.author,
   chapters: parsed.chapters.length,
@@ -912,8 +897,9 @@ writeFileSync(resolve(outputDir, "book-build-summary.json"), JSON.stringify({
 
 console.log(JSON.stringify({
   html: outputPath,
-  coverOptions: resolve(outputDir, "cover-options.html"),
-  summary: resolve(outputDir, "book-build-summary.json"),
+  coverOptions: coverOptionsPath,
+  manifest: buildManifestPath,
+  summary: buildSummaryPath,
   sourceWords: wordCount(manuscript),
   chapters: parsed.chapters.length,
   parts: parsed.parts.length
