@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-book-browser.sh - Internal launcher for book-browser.mjs with temp Playwright.
+# run-book-browser.sh - Internal launcher for the pinned local browser toolchain.
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
@@ -8,31 +8,23 @@ if [[ $# -lt 1 ]]; then
 fi
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SKILL_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 
 if ! command -v node >/dev/null 2>&1; then
   echo "Node.js is required but not installed." >&2
   exit 1
 fi
 
-if ! command -v npm >/dev/null 2>&1; then
-  echo "npm is required but not installed." >&2
+NODE_MAJOR=$(node -p 'Number(process.versions.node.split(".")[0])')
+if [[ "$NODE_MAJOR" -lt 20 ]]; then
+  echo "Node.js 20 or newer is required (found $(node --version))." >&2
   exit 1
 fi
 
-TEMP_DIR=$(mktemp -d)
-cleanup() {
-  rm -rf "$TEMP_DIR"
-}
-trap cleanup EXIT
+if [[ ! -d "$SKILL_DIR/node_modules/playwright" ]]; then
+  echo "Pinned dependencies are not installed in $SKILL_DIR." >&2
+  echo "Run: cd \"$SKILL_DIR\" && npm ci && npm run setup:browsers" >&2
+  exit 1
+fi
 
-cp "$SCRIPT_DIR/book-browser.mjs" "$TEMP_DIR/book-browser.mjs"
-cat > "$TEMP_DIR/package.json" <<'PKG'
-{ "name": "frontend-textbooks-book-browser", "private": true, "type": "module" }
-PKG
-
-(
-  cd "$TEMP_DIR"
-  npm install playwright >/dev/null 2>&1
-  npx playwright install chromium >/dev/null 2>&1
-  node "$TEMP_DIR/book-browser.mjs" "$@"
-)
+exec node "$SCRIPT_DIR/book-browser.mjs" "$@"

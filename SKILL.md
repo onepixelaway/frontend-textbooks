@@ -7,6 +7,16 @@ description: Create designed, letter-size HTML textbooks, manuals, field guides,
 
 Create letter-size, book-quality HTML documents and matching PDFs from user-supplied manuscript text.
 
+## Resolve Skill Paths
+
+Before running any bundled command, resolve this installed skill rather than assuming the user's working directory contains `scripts/`:
+
+```bash
+SKILL_DIR="<absolute path to the directory containing this SKILL.md>"
+```
+
+Keep book inputs and outputs in the user's workspace. Invoke the bundled tooling through `"$SKILL_DIR/scripts/..."`.
+
 ## Core Principles
 
 1. **Preserve the Manuscript** - Keep at least 90% of the supplied manuscript unless the user explicitly asks for abridgment, condensation, or summarization.
@@ -232,35 +242,6 @@ For editorial, HBR-like, coffee-table, business, and visually led instructional 
 - Place opening figures in that prose page or as source-faithful figure pages at the natural point in the text. Use pull quotes only as small duplicated furniture from the source; do not use them as a reason to add opener pages.
 - If the user explicitly requests chapter-opening spreads, mark those pages with `data-allow-opening-spread="true"` and still ensure they preserve manuscript order, do not repeat full paragraphs, and are useful enough to justify the extra pages.
 
-## Phase 5A: Pre-Final Cover Direction Sprint
-
-For every completed book, create a cover-options artifact after the interior style, assets, and metadata are stable, and before final PDF export. Treat this as the last creative checkpoint before delivery, not an early mood board. For editorial, coffee-table, HBR-like, business, brand, or visually led books, this must be a full cover sprint.
-
-Required behavior:
-
-1. Produce 4-5 cover routes using the actual title, subtitle, author, and optional publisher/imprint. Do not make five small variations of the same layout. For a deliberately plain conversion, still provide at least 3 cover routes unless the user explicitly opts out.
-2. Vary the dominant mechanism across routes:
-   - **Type as image**: oversized title, mixed weights, extreme scale, or stacked/condensed type.
-   - **Conceptual symbol**: threshold, system map, decision fork, object, or abstract shape that expresses the book's argument.
-   - **Editorial photo/art**: full-bleed or deliberately cropped image with type integrated into the composition.
-   - **High-contrast minimal**: 2-3 colors, strong negative space, one memorable mark.
-   - **Series/press system**: disciplined imprint-like cover that still has a focal hook.
-3. Limit each route to one primary idea. If the cover has a photo, the type still needs a clear hierarchy. If the cover is mostly type, the typography must become the visual event.
-4. Test the routes at thumbnail scale. The title must remain readable around 100px wide; if not, redesign.
-5. Render the cover options at a useful review size and as thumbnails. If the user is actively reviewing the work, share or deploy the options before the final export so they can choose.
-6. Choose the strongest route for the final book unless the user explicitly wants to choose. Keep the cover-options artifact when useful so the user can compare.
-7. Use the selected route as the source of truth for the final cover. Copy its composition, scale relationships, image crop, metadata placement, and negative space into the real cover. If the final cover needs changes, update the selected option to match. A final PDF cover that differs materially from the selected route is a failed cover pass.
-
-Cover quality gates:
-
-- The title must be the largest and highest-contrast element unless a single visual symbol is deliberately dominant.
-- The subtitle should support the promise, not compete with the title.
-- Use at most two type families on the cover; vary width, weight, case, size, or tracking to create hierarchy.
-- Avoid generic stock-photo layouts, polite centered title pages, weak split-image compositions, and low-contrast serif titles that disappear at thumbnail size.
-- For business/nonfiction covers, favor bold typography, high contrast, restrained palettes, and a clear transformation or promise.
-- Include the author in a deliberate position; it may be quiet, but it must not be missing.
-- Include publisher/imprint only when supplied. If included, keep it subordinate to title and author.
-
 ## Phase 4: Style Defaults and Style Discovery
 
 Before choosing the default theme, check whether the user mentioned a registered theme name or alias from `themes/index.mjs`, such as `alumni`, `colbalt`, `cobalt`, `default`, or `executive`. If matched, set `book.json.style` to that theme and use that theme's `imagePrompt.template` for generated cover and section art.
@@ -319,7 +300,7 @@ Before generating the final HTML, read:
 This skill includes a reusable scaffold for the repetitive plumbing of HTML book production:
 
 ```bash
-node scripts/build-html-book.mjs book.json manuscript.md
+node "$SKILL_DIR/scripts/build-html-book.mjs" book.json manuscript.md
 ```
 
 Use `scripts/build-html-book.mjs` when the manuscript is mostly Markdown prose and you want a reliable starting book shell: cover, title page, table of contents, part dividers, measured body text pages, mobile collapse behavior, cover-options artifact, page numbers, and overflow assertions. The script expects `book.json` with at least `title` and `author`; optional fields include `subtitle`, `outputDir`, `outputHtml`, `coverImage`, `coverBandHeight`, `requirePartImages`, `requireDiagrams`, `chapterOpeners`, `style`, `bookType`, `coverKicker`, `bodyColumns`, `chapterClosers`, and `partImages`.
@@ -377,7 +358,7 @@ Page integrity requirements:
 - Every `.page` should have a single `.page-inner` with `height` or `min-height` tied to 11in and `overflow: hidden` only after confirming no meaningful content is clipped.
 - Flowing text sections may paginate naturally, but fixed-format pages may not be split.
 - Add a verification pass that renders representative pages around every transition from flowing text to `.page`, especially part dividers after long chapters.
-- Render the deployed/browser HTML at a phone viewport (for example 390x844). The mobile view must not show a black page gap slicing a prose section in half, and it must not show a scaled Letter page where body copy is one wide desktop column.
+- Render the browser HTML at a phone viewport (for example 390x844). The mobile view must not show a black page gap slicing a prose section in half, and it must not show a scaled Letter page where body copy is one wide desktop column.
 - If phone HTML shows a black gutter between two fragments of the same prose section, treat that as a failed screen artifact even if the PDF is technically valid.
 
 Text handling requirements:
@@ -392,22 +373,34 @@ Text handling requirements:
 
 Before exporting, run the selected-route parity check: place the chosen cover option and final cover side by side or render both, then verify that the final cover did not gain extra marks, different scale, different metadata placement, or a different image crop unless the selected route was updated too.
 
+## Phase 5A: Pre-Final Cover Direction Sprint
+
+After the interior style, assets, and metadata are stable, create the cover-options artifact as the final creative checkpoint before PDF export.
+
+1. Produce 4-5 genuinely distinct routes using the actual title, subtitle, author, and optional imprint. A deliberately plain conversion still needs at least 3 unless the user opts out.
+2. Vary the dominant mechanism: type as image, conceptual symbol, editorial photo/art, high-contrast minimal, and series/press system.
+3. Give each route one primary idea and verify title readability around 100px wide.
+4. Render review-size and thumbnail options, then let the user choose when they are actively reviewing; otherwise select the strongest route.
+5. Make the final cover match the selected route's composition, crop, hierarchy, metadata placement, and negative space. Update the option if the final cover changes.
+
+Quality gates: title hierarchy must be decisive, subtitle subordinate, no more than two type families, author present, imprint included only when supplied, and no generic stock-photo or polite title-page treatment.
+
 ## Phase 6: Export PDF
 
 Run the bundled exporter:
 
 ```bash
-bash scripts/export-pdf.sh <path-to-html> [output.pdf]
+bash "$SKILL_DIR/scripts/export-pdf.sh" <path-to-html> [output.pdf]
 ```
 
 The exporter uses Playwright's browser PDF pipeline with Letter sizing and printed backgrounds. It does not screenshot slides.
 
-If Playwright or Chromium is missing, the script installs it in a temporary directory. If network installation fails, use an existing local browser PDF method and report that fallback clearly.
+The skill uses pinned local dependencies. If setup has not been completed, run `npm ci` and `npm run setup:browsers` inside `"$SKILL_DIR"`; do not install an unversioned browser toolchain during export.
 
 If the normal exporter times out while waiting for `networkidle`, or if the book uses browser-side pagination, read [references/pdf-optimization.md](references/pdf-optimization.md) and export with the readiness-gated exporter:
 
 ```bash
-bash scripts/export-ready-pdf.sh <path-to-html> [output.pdf] --no-open
+bash "$SKILL_DIR/scripts/export-ready-pdf.sh" <path-to-html> [output.pdf] --no-open
 ```
 
 This path waits for fonts, images, browser pagination readiness, and text-frame overflow checks before writing the PDF.
@@ -446,7 +439,7 @@ If preservation drops below 90%, do not deliver as complete. Restore text, add p
 For scaffold-generated books, run the bundled HTML verifier before or after PDF export:
 
 ```bash
-bash scripts/verify-html-book.sh index.html
+bash "$SKILL_DIR/scripts/verify-html-book.sh" index.html
 ```
 
 The verifier serves the HTML, waits for browser-side pagination, checks text-frame overflow, and captures representative desktop and mobile screenshots under `.verification/`. Passing this verifier is not enough by itself; still inspect the screenshots and exported PDF for art direction, hollow pages, split atomic pages, cover parity, diagram logic, and mobile reading quality.
@@ -454,8 +447,8 @@ The verifier serves the HTML, waits for browser-side pagination, checks text-fra
 For PDF-optimized verification, prefer the rendered-state verifier and PDF inspector. See [references/pdf-optimization.md](references/pdf-optimization.md) for the full rendered-state workflow.
 
 ```bash
-bash scripts/verify-rendered-book.sh index.html
-bash scripts/inspect-pdf.sh book.pdf
+bash "$SKILL_DIR/scripts/verify-rendered-book.sh" index.html
+bash "$SKILL_DIR/scripts/inspect-pdf.sh" book.pdf
 ```
 
 Use the rendered browser word count, not static HTML stripping, when the manuscript is embedded in JSON or paginated by JavaScript.
@@ -493,16 +486,6 @@ Tell the user:
 - Any generated or supplied assets used
 - Any caveats, such as missing fonts, fallback export, or images that could not be generated
 
-## Optional Sharing
-
-If the user wants a public URL, use:
-
-```bash
-bash scripts/deploy.sh <path-to-book-folder-or-html>
-```
-
-For single HTML files with assets, prefer deploying the containing folder so image paths remain intact.
-
 ## Supporting Files
 
 | File | Purpose | When to Read |
@@ -516,10 +499,9 @@ For single HTML files with assets, prefer deploying the containing folder so ima
 | [scripts/build-html-book.mjs](scripts/build-html-book.mjs) | Generic scaffold for Markdown manuscript parsing, book shell generation, cover options, and browser-side text pagination | Use for straightforward prose books or as a starting point before manuscript-specific customization |
 | [scripts/book-browser.mjs](scripts/book-browser.mjs) | Shared Playwright server/export/verification implementation | Internal helper; inspect before changing exporter or verifier behavior |
 | [scripts/book-browser-shell.sh](scripts/book-browser-shell.sh) | Shared shell parsing/path/opening helpers for browser wrapper scripts | Internal helper; inspect before changing shell wrapper behavior |
-| [scripts/run-book-browser.sh](scripts/run-book-browser.sh) | Internal temp Playwright launcher for the shared browser runner | Internal helper used by export and verification scripts |
+| [scripts/run-book-browser.sh](scripts/run-book-browser.sh) | Pinned local Playwright launcher for the shared browser runner | Internal helper used by export and verification scripts |
 | [scripts/export-pdf.sh](scripts/export-pdf.sh) | Export Letter PDF from HTML | PDF delivery |
 | [scripts/export-ready-pdf.sh](scripts/export-ready-pdf.sh) | Export Letter PDF after fonts/images/browser pagination are ready and text frames are checked | PDF delivery for JS-paginated or networkidle-sensitive books |
 | [scripts/verify-html-book.sh](scripts/verify-html-book.sh) | Serve generated HTML, wait for pagination, check overflow, and capture desktop/mobile screenshots | Verification, especially after using the scaffold |
 | [scripts/verify-rendered-book.sh](scripts/verify-rendered-book.sh) | Read rendered browser text, check overflow, and capture desktop/mobile feature screenshots | Verification for PDF-optimized, JS-paginated, or enhanced scaffold books |
-| [scripts/inspect-pdf.sh](scripts/inspect-pdf.sh) | Inspect PDF page count/size and render a cover PNG with Poppler/macOS/PDF-byte fallbacks | Final PDF metadata and visual sanity check |
-| [scripts/deploy.sh](scripts/deploy.sh) | Deploy HTML book to Vercel | Optional sharing |
+| [scripts/inspect-pdf.sh](scripts/inspect-pdf.sh) | Inspect every PDF page's count and MediaBox and render every page with bounded Poppler tooling | Final PDF structural and visual sanity check |

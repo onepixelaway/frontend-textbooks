@@ -910,7 +910,7 @@ If `bs4` is unavailable, use a simpler local script or browser text extraction. 
 Use:
 
 ```bash
-bash scripts/export-pdf.sh index.html book-title.pdf
+bash "$SKILL_DIR/scripts/export-pdf.sh" index.html book-title.pdf
 ```
 
 The exporter starts a local server for relative assets and fonts, then calls Playwright `page.pdf()` using Letter format and CSS page size.

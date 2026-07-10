@@ -1,0 +1,20 @@
+{
+  "name": "frontend-textbooks",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Build, verify, and export designed HTML textbooks.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:book": "node scripts/build-html-book.mjs",
+    "check": "node --check scripts/build-html-book.mjs && node --check scripts/book-browser.mjs && node --check scripts/lib/browser-runtime.mjs && node --check scripts/lib/manuscript.mjs && node --check scripts/lib/pdf-structure.mjs && node --check scripts/lib/static-assets.mjs && bash -n scripts/*.sh",
+    "setup:browsers": "playwright install chromium",
+    "test": "node --test --test-reporter=spec tests/*.test.mjs"
+  },
+  "dependencies": {
+    "markdown-it": "14.3.0",
+    "playwright": "1.61.1"
+  }
+}

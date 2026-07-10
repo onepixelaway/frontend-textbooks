@@ -17,7 +17,7 @@ For long prose books that still need designed interiors:
 Use the readiness-gated exporter when the normal exporter times out, when the book embeds manuscript text in JSON, or when `window.__BOOK_READY` controls pagination:
 
 ```bash
-bash scripts/export-ready-pdf.sh <path-to-html> [output.pdf] --no-open
+bash "$SKILL_DIR/scripts/export-ready-pdf.sh" <path-to-html> [output.pdf] --no-open
 ```
 
 The shared browser runner serves relative assets, waits for fonts/images and `window.__BOOK_READY`, checks `.text-frame` overflow, then exports with Letter sizing, printed backgrounds, CSS page size, and zero margins.
@@ -27,8 +27,8 @@ The shared browser runner serves relative assets, waits for fonts/images and `wi
 Use rendered text, not static HTML stripping, when JavaScript paginates the book:
 
 ```bash
-bash scripts/verify-rendered-book.sh index.html
-bash scripts/inspect-pdf.sh book.pdf
+bash "$SKILL_DIR/scripts/verify-rendered-book.sh" index.html
+bash "$SKILL_DIR/scripts/inspect-pdf.sh" book.pdf
 ```
 
-`verify-rendered-book.sh` records `document.body.innerText` after readiness, checks overflow, and captures desktop/mobile screenshots plus feature pages. `inspect-pdf.sh` uses `pdfinfo` when available, macOS metadata when available, a PDF byte fallback for page count/MediaBox, and `pdftoppm` or `sips` for cover rendering.
+`verify-rendered-book.sh` waits for explicit readiness, validates allowlisted assets and source coverage, checks desktop/mobile/print overflow, and captures every fixed page plus representative mobile views. `inspect-pdf.sh` validates every page's Letter-size MediaBox and uses a bounded `pdftoppm` process to render every PDF page for inspection. Readiness-gated export separately requires extractable text for text-bearing books.
