@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aesthetic-review.schema.json",
+  "title": "Model-authored aesthetic review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "requestHash", "contactSheetHash", "verdict", "strengths", "issues", "actions"],
+  "properties": {
+    "version": { "type": "integer", "enum": [1] },
+    "requestHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "contactSheetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "verdict": { "type": "string", "enum": ["pass", "revise"] },
+    "strengths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "issues": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "actions": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  }
+}

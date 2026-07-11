@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "repair-actions.schema.json",
+  "title": "Model-authored targeted repair actions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "reportHash", "actions"],
+  "properties": {
+    "version": { "type": "integer", "enum": [1] },
+    "reportHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["failureId", "action", "target", "instruction", "rationale"],
+        "properties": {
+          "failureId": { "type": "string", "minLength": 1 },
+          "action": { "type": "string", "enum": ["repaginate", "change-layout", "remove-furniture", "replace-asset", "rewrite-visual", "approve-exception"] },
+          "target": { "type": "string", "minLength": 1 },
+          "instruction": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

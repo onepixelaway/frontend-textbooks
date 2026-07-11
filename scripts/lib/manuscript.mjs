@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
-
 import MarkdownIt from "markdown-it";
+import { sha256 } from "./content-hash.mjs";
 
 const SOURCE_PRESERVATION_THRESHOLD = 0.9;
 
@@ -17,10 +16,6 @@ function normalizeSourceText(value) {
 export function wordCount(value) {
   const text = normalizeSourceText(value);
   return text ? text.split(/\s+/u).length : 0;
-}
-
-function sha256(value) {
-  return createHash("sha256").update(String(value ?? "")).digest("hex");
 }
 
 export function unicodeSlug(value) {
@@ -111,13 +106,16 @@ function blockType(tokens) {
 function sourceRecordFactory() {
   const allocate = createUniqueIdAllocator();
   const records = [];
-  function create(kind, expectedText) {
+  function create(kind, expectedText, ownership = {}) {
     const normalized = normalizeSourceText(expectedText);
     const digest = sha256(`${kind}\0${normalized}`);
     const id = allocate(`source-${kind}-${digest.slice(0, 12)}`, `source-${kind}`);
     const record = {
       id,
+      ordinal: records.length,
       kind,
+      chapterId: ownership.chapterId ?? null,
+      partId: ownership.partId ?? null,
       expectedText: normalized,
       wordCount: wordCount(normalized),
       sha256: sha256(normalized)
@@ -182,9 +180,10 @@ export function parseManuscript(source) {
 
     if (first.type === "heading_open" && first.tag === "h2") {
       if (/^Part(?:\s|$)/iu.test(expectedText)) {
-        const sourceRecord = sourceRecords.create("part", expectedText);
+        const partId = allocateStructuralId(expectedText, `part-${parts.length + 1}`);
+        const sourceRecord = sourceRecords.create("part", expectedText, { partId });
         currentPart = {
-          id: allocateStructuralId(expectedText, `part-${parts.length + 1}`),
+          id: partId,
           ...partFields(expectedText),
           sourceBlockId: sourceRecord.id
         };
@@ -195,9 +194,13 @@ export function parseManuscript(source) {
 
       const isIntroduction = /^Introduction\b/iu.test(expectedText);
       if (!isIntroduction) chapterCounter += 1;
-      const sourceRecord = sourceRecords.create("chapter", expectedText);
+      const chapterId = allocateStructuralId(expectedText, `chapter-${String(chapters.length + 1).padStart(2, "0")}`);
+      const sourceRecord = sourceRecords.create("chapter", expectedText, {
+        chapterId,
+        partId: currentPart?.id ?? null
+      });
       currentChapter = {
-        id: allocateStructuralId(expectedText, `chapter-${String(chapters.length + 1).padStart(2, "0")}`),
+        id: chapterId,
         number: isIntroduction ? "Introduction" : String(chapterCounter),
         sortNumber: chapterCounter,
         title: expectedText,
@@ -211,7 +214,10 @@ export function parseManuscript(source) {
 
     if (!currentChapter) addImplicitChapter();
     const type = blockType(tokens);
-    const sourceRecord = expectedText ? sourceRecords.create(type, expectedText) : null;
+    const sourceRecord = expectedText ? sourceRecords.create(type, expectedText, {
+      chapterId: currentChapter.id,
+      partId: currentPart?.id ?? null
+    }) : null;
     currentChapter.blocks.push({
       type,
       html: markdown.renderer.render(tokens, markdown.options, env).trim(),

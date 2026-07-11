@@ -67,19 +67,71 @@ function pdfStructureWithPdfinfo(pdfPath) {
 }
 
 function normalizedTokens(value) {
-  return String(value || "").normalize("NFC").replace(/\s+/gu, " ").trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
+  return String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase("und")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
 }
 
-function orderedCoverage(expectedTokens, actualTokens) {
-  let actualIndex = 0;
-  let covered = 0;
-  for (const token of expectedTokens) {
-    while (actualIndex < actualTokens.length && actualTokens[actualIndex] !== token) actualIndex += 1;
-    if (actualIndex >= actualTokens.length) break;
-    covered += 1;
-    actualIndex += 1;
+function sequenceEnd(actualTokens, expectedTokens, start) {
+  let actualIndex = start;
+  for (const expected of expectedTokens) {
+    if (actualTokens[actualIndex] === expected) {
+      actualIndex += 1;
+      continue;
+    }
+    if (expected.length < 3) return -1;
+    let joined = "";
+    const fragmentStart = actualIndex;
+    while (actualIndex < actualTokens.length && actualTokens[actualIndex].length <= 2 && joined.length < expected.length) {
+      joined += actualTokens[actualIndex];
+      actualIndex += 1;
+    }
+    if (actualIndex === fragmentStart || joined !== expected) return -1;
   }
-  return covered;
+  return actualIndex;
+}
+
+function sequenceIndex(actualTokens, tokenInitialPositions, expectedTokens, start) {
+  const positions = tokenInitialPositions.get(expectedTokens[0][0]) ?? [];
+  let low = 0;
+  let high = positions.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (positions[middle] < start) low = middle + 1;
+    else high = middle;
+  }
+  for (let positionIndex = low; positionIndex < positions.length; positionIndex += 1) {
+    const index = positions[positionIndex];
+    if (sequenceEnd(actualTokens, expectedTokens, index) !== -1) return index;
+  }
+  return -1;
+}
+
+export function sourceTokenCoverage(blocks, actualText) {
+  const actualTokens = normalizedTokens(actualText);
+  const tokenPositions = new Map();
+  actualTokens.forEach((token, index) => {
+    const positions = tokenPositions.get(token[0]) ?? [];
+    positions.push(index);
+    tokenPositions.set(token[0], positions);
+  });
+  let cursor = 0;
+  let covered = 0;
+  let total = 0;
+  for (const block of blocks) {
+    const expectedTokens = normalizedTokens(block.expectedText ?? block.text);
+    total += expectedTokens.length;
+    if (!expectedTokens.length) continue;
+    const foundAt = sequenceIndex(actualTokens, tokenPositions, expectedTokens, cursor);
+    if (foundAt === -1) continue;
+    covered += expectedTokens.length;
+    cursor = sequenceEnd(actualTokens, expectedTokens, foundAt);
+  }
+  return total ? covered / total : 0;
 }
 
 export function validatePdfStructure(pdfPath, expectedPages = null, { requireText = false, sourceManifest = null } = {}) {
@@ -108,9 +160,7 @@ export function validatePdfStructure(pdfPath, expectedPages = null, { requireTex
       throw new Error("PDF text extraction is empty for a text-bearing book");
     }
     if (sourceManifest?.blocks?.length) {
-      const expectedTokens = sourceManifest.blocks.flatMap((block) => normalizedTokens(block.expectedText ?? block.text));
-      const actualTokens = normalizedTokens(extracted.stdout);
-      const ratio = expectedTokens.length ? orderedCoverage(expectedTokens, actualTokens) / expectedTokens.length : 0;
+      const ratio = sourceTokenCoverage(sourceManifest.blocks, extracted.stdout);
       const threshold = Number(sourceManifest.threshold) || 0.9;
       if (ratio < threshold) {
         throw new Error(`PDF source preservation coverage ${(ratio * 100).toFixed(1)}% is below the ${(threshold * 100).toFixed(1)}% threshold`);

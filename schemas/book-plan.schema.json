@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "book-plan.schema.json",
+  "title": "Model-authored editorial plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "manuscriptHash", "editorial", "theme", "layout", "visuals", "classifications", "exceptions", "aestheticReview"],
+  "properties": {
+    "version": { "type": "integer", "enum": [1] },
+    "manuscriptHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "editorial": {
+      "type": "object", "additionalProperties": false,
+      "required": ["audience", "genre", "purpose", "tone"],
+      "properties": {
+        "audience": { "type": "string", "minLength": 1 },
+        "genre": { "type": "string", "minLength": 1 },
+        "purpose": { "type": "string", "minLength": 1 },
+        "tone": { "type": "string", "minLength": 1 }
+      }
+    },
+    "theme": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "rationale"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "layout": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bodyColumns", "chapterOpeners", "rationale"],
+      "properties": {
+        "bodyColumns": { "type": "string", "enum": ["text-two", "text-single", "text-three"] },
+        "chapterOpeners": { "type": "boolean" },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "visuals": {
+      "type": "object", "additionalProperties": false,
+      "required": ["policy", "diagrams", "images"],
+      "properties": {
+        "policy": { "type": "string", "enum": ["none", "selective", "image-led"] },
+        "diagrams": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["sourceBlockIds", "concept", "rationale"], "properties": { "sourceBlockIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "concept": { "type": "string", "minLength": 1 }, "rationale": { "type": "string", "minLength": 1 } } } },
+        "images": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["scope", "subject", "rationale"], "properties": { "scope": { "type": "string", "minLength": 1 }, "subject": { "type": "string", "minLength": 1 }, "rationale": { "type": "string", "minLength": 1 } } } }
+      }
+    },
+    "classifications": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["sourceBlockId", "role", "treatment", "rationale"],
+        "properties": {
+          "sourceBlockId": { "type": "string", "minLength": 1 },
+          "role": { "type": "string", "enum": ["narrative", "definition", "process", "comparison", "evidence", "exercise", "summary", "transition"] },
+          "treatment": { "type": "string", "enum": ["prose", "callout", "diagram", "table", "checklist", "quote", "image-brief"] },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["rule", "scope", "rationale"],
+        "properties": {
+          "rule": { "type": "string", "enum": ["allow-flowing-prose", "waive-diagrams", "waive-part-images", "allow-image-only", "allow-remote-fonts"] },
+          "scope": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "aestheticReview": {
+      "type": "object", "additionalProperties": false,
+      "required": ["required", "criteria"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "criteria": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}

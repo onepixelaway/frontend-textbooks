@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { installPageGuards, loadBook, withServer } from "./lib/browser-runtime.mjs";
 import { createStaticAssetContext } from "./lib/static-assets.mjs";
 import { validatePdfStructure } from "./lib/pdf-structure.mjs";
+import { VERIFICATION_PROFILES, verificationProfile } from "./lib/verification-profiles.mjs";
+import { cleanVerificationOutput, createContactSheet, screenshotEveryPage, screenshotIfPresent, screenshotSourcePages, writeVerificationArtifacts } from "./lib/verification-artifacts.mjs";
+import { GUARD_CHECKS, REPORT_CHECKS } from "./lib/verification-checks.mjs";
+import { acquirePipelineLock } from "./lib/pipeline-lock.mjs";
 
 const SHORT_SINGLE_CHAR_LIMIT = 1300;
 const LONG_FLOW_WORD_LIMIT = 1400;
@@ -15,14 +19,15 @@ const NARROW_FLOW_MEASURE_IN = 3.75;
 function usage() {
   console.error(`Usage:
   node book-browser.mjs export --html <index.html> --pdf <output.pdf> [--wait networkidle|ready]
-  node book-browser.mjs verify --html <index.html> --output-dir <dir> [--wait networkidle|ready]`);
+  node book-browser.mjs verify --html <index.html> --output-dir <dir> [--wait networkidle|ready]
+  node book-browser.mjs finalize --html <index.html> --pdf <output.pdf> --output-dir <dir> [--format summary|json]`);
   process.exit(1);
 }
 
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
-  if (!mode || !["export", "verify"].includes(mode)) usage();
-  const args = { mode, wait: "ready" };
+  if (!mode || !["export", "verify", "finalize"].includes(mode)) usage();
+  const args = { mode, wait: "ready", format: "summary", profile: "full" };
   for (let index = 0; index < rest.length; index += 1) {
     const token = rest[index];
     if (!token.startsWith("--")) usage();
@@ -33,9 +38,12 @@ function parseArgs(argv) {
     index += 1;
   }
   if (!args.html) usage();
-  if (mode === "export" && !args.pdf) usage();
-  if (mode === "verify" && !args["output-dir"]) usage();
+  if (["export", "finalize"].includes(mode) && !args.pdf) usage();
+  if (["verify", "finalize"].includes(mode) && !args["output-dir"]) usage();
   if (!["ready", "networkidle"].includes(args.wait)) usage();
+  if (!["summary", "json"].includes(args.format)) usage();
+  if (!Object.hasOwn(VERIFICATION_PROFILES, args.profile)) usage();
+  if (mode === "finalize" && args.profile !== "full") usage();
   return args;
 }
 
@@ -218,7 +226,7 @@ async function renderedReport(page, diagnostics = {}) {
         nodesBySourceId.set(id, matching);
       }
       const missingBlocks = [];
-      const blockCoverage = [];
+      const partialBlocks = [];
       let declaredWords = 0;
       let coveredWords = 0;
       const embeddedIds = new Set();
@@ -257,7 +265,7 @@ async function renderedReport(page, diagnostics = {}) {
         const tokenRatio = Math.min(1, orderedCoveredTokenCount(expected, actual) / expectedTokens);
         const blockCovered = Math.min(words, Math.round(words * tokenRatio));
         coveredWords += blockCovered;
-        blockCoverage.push({ id, words, coveredWords: blockCovered, ratio: Number(tokenRatio.toFixed(4)) });
+        if (tokenRatio < 1) partialBlocks.push({ id, ratio: Number(tokenRatio.toFixed(4)) });
       }
       if (manifestBlocks && manifestBlocks.length !== embeddedIds.size) {
         errors.push(`Embedded source block count (${embeddedIds.size}) does not match the build manifest (${manifestBlocks.length})`);
@@ -278,14 +286,20 @@ async function renderedReport(page, diagnostics = {}) {
         errors.push("Build manifest source.sha256 does not match the embedded source manifest");
       }
       const denominator = totalWords > 0 ? totalWords : declaredWords;
+      const failedBlockIds = [...new Set([...missingBlocks, ...partialBlocks.map((block) => block.id)])].slice(0, 100);
+      const blocksById = new Map(blocks.map((block) => [String(block.id), block]));
       return {
         required: true,
         threshold,
         totalWords: denominator,
         coveredWords,
         ratio: denominator > 0 ? Number((coveredWords / denominator).toFixed(4)) : 0,
-        missingBlocks,
-        blockCoverage,
+        failedBlockIds,
+        failedBlocks: failedBlockIds.map((id) => ({
+          id,
+          text: String(blocksById.get(id)?.text ?? blocksById.get(id)?.expectedText ?? "").slice(0, 360)
+        })),
+        partialBlocks: partialBlocks.slice(0, 100),
         errors
       };
     }
@@ -499,7 +513,10 @@ async function renderedReport(page, diagnostics = {}) {
           node.querySelector("figcaption")?.textContent,
           node.querySelector("title")?.textContent
         ].join(" ");
-        return diagramTerms.test(descriptor) || Boolean(node.querySelector("svg"));
+        const structuredCard = !node.classList.contains("diagram-card") ||
+          (node.querySelectorAll(".diagram-node").length >= 2 && Boolean(node.querySelector(".diagram-connector"))) ||
+          Boolean(node.querySelector("svg, canvas"));
+        return structuredCard && (diagramTerms.test(descriptor) || Boolean(node.querySelector("svg, canvas")));
       });
       return unique.map((node) => {
         const page = node.closest(".page");
@@ -513,7 +530,25 @@ async function renderedReport(page, diagnostics = {}) {
 
     const pages = [...document.querySelectorAll(".page")];
     const frames = [...document.querySelectorAll(".text-frame")];
-    const overflowFrames = frames.filter((frame) => frame.scrollHeight > frame.clientHeight + 1 || frame.scrollWidth > frame.clientWidth + 1);
+    const overflowFrames = frames
+      .filter((frame) => frame.scrollHeight > frame.clientHeight + 1 || frame.scrollWidth > frame.clientWidth + 1)
+      .map((frame) => {
+        const page = frame.closest(".page");
+        const pageIndex = pages.indexOf(page);
+        const sourceNodes = [...frame.querySelectorAll("[data-source-block-id]")].slice(0, 12);
+        return {
+          page: pageLabel(page, pageIndex),
+          sourceBlockIds: [...new Set(sourceNodes.map((node) => node.dataset.sourceBlockId).filter(Boolean))],
+          sourceContext: sourceNodes.map((node) => ({ id: node.dataset.sourceBlockId, text: normalizeText(node.innerText).slice(0, 360) })),
+          evidencePaths: window.innerWidth < 600
+            ? ["mobile-viewport.png"]
+            : (pageIndex >= 0 ? [`desktop-page-${String(pageIndex + 1).padStart(4, "0")}.png`] : ["desktop-viewport.png"]),
+          scrollHeight: frame.scrollHeight,
+          clientHeight: frame.clientHeight,
+          scrollWidth: frame.scrollWidth,
+          clientWidth: frame.clientWidth
+        };
+      });
     const tailOverlaps = [...document.querySelectorAll(".text-page .tail-furniture")].filter(tailFurnitureOverlaps);
     const missingTocTargets = [...document.querySelectorAll("[data-toc-page-for]")]
       .map((node) => {
@@ -598,14 +633,14 @@ async function renderedReport(page, diagnostics = {}) {
       ready: bookDataNode ? window.__BOOK_READY === true : true,
       error: window.__BOOK_ERROR || null,
       bookDataError,
-      diagnostics,
+      diagnostics: Object.fromEntries(Object.entries(diagnostics).filter(([key]) => key !== "manifestSource")),
       media: matchMedia("print").matches ? "print" : (window.innerWidth < 600 ? "mobile" : "screen"),
       pages: pages.length,
       printSheets: matchMedia("print").matches
         ? Math.max(1, Math.ceil((document.querySelector(".book")?.scrollHeight || document.body.scrollHeight) / (11 * 96) - 0.001))
         : pages.length,
       frames: frames.length,
-      overflowFrames: overflowFrames.length,
+      overflowFrames,
       fixedPageOverflows,
       mobileHorizontalOverflows: mobileLayout.horizontalOverflows,
       mobileColumnFailures: mobileLayout.columnFailures,
@@ -667,7 +702,7 @@ const reportFailureRules = [
     failed: (report) => Boolean(report.bookDataError),
     message: (report) => report.bookDataError
   },
-  ...["pageErrors", "blockedRequests", "requestFailures", "httpFailures", "assetFailures", "readinessFailures"].map((field) => ({
+  ...GUARD_CHECKS.map(({ field }) => ({
     failed: (report) => (report.diagnostics?.[field]?.length || 0) > 0,
     message: (report) => report.diagnostics[field][0]
   })),
@@ -683,27 +718,12 @@ const reportFailureRules = [
     failed: (report) => report.sourcePreservation?.required && report.sourcePreservation.ratio < report.sourcePreservation.threshold,
     message: (report) => `Source preservation coverage ${(report.sourcePreservation.ratio * 100).toFixed(1)}% is below the ${(report.sourcePreservation.threshold * 100).toFixed(1)}% threshold`
   },
-  countFailure("overflowFrames", "text frame(s) overflow"),
-  countFailure("fixedPageOverflows", "fixed page(s) overflow or clip content"),
-  countFailure("mobileHorizontalOverflows", "mobile horizontal overflow(s)"),
-  countFailure("mobileColumnFailures", "mobile text frame(s) remain multi-column"),
-  countFailure("tailOverlaps", "tail furniture block(s) overlap text"),
-  countFailure("missingTocTargets", "table-of-contents page reference(s) are missing or blank"),
-  countFailure("continuationMarks", "continuation marker(s) are visible in text-page titles"),
-  countFailure("coverAssetReuses", "interior page asset(s) reuse the cover image"),
-  countFailure("textOnlyPartDividers", "part divider(s) are missing generated image assets"),
-  countFailure("duplicatePartDividerAssets", "duplicated part-divider image asset(s)"),
+  ...REPORT_CHECKS.slice(0, 10).map(({ field, message }) => countFailure(field, message)),
   {
     failed: (report) => report.requireDiagrams && reportCount(report, "diagramElements") === 0,
     message: () => "required diagram policy is enabled, but no diagrams or diagram-like tools were found"
   },
-  countFailure("repeatedOpeningExcerpts", "opening spread excerpt(s) repeat on the following body page"),
-  countFailure("unrequestedOpeningPages", "unrequested opening page(s)"),
-  countFailure("shortTwoColumnPages", "short text page(s) should use text-short-single instead of sparse two-column layout"),
-  countFailure("sparseItemColumnGrids", "sparse item grid(s) should use sparse-item-rows instead of skinny columns"),
-  countFailure("missingMeasuredTextPages", "book(s) have substantial unmeasured chapter-flow prose but no measured text pages"),
-  countFailure("unmeasuredChapterFlows", "long unmeasured chapter-flow section(s); use .page.text-page pagination or mark intentional plain-reader flow with data-allow-flowing-prose"),
-  countFailure("narrowChapterFlows", "chapter-flow section(s) have accidentally narrow text measures")
+  ...REPORT_CHECKS.slice(10).map(({ field, message }) => countFailure(field, message))
 ];
 
 function reportFailures(report) {
@@ -719,71 +739,64 @@ async function assertReady(page, diagnostics) {
   return report;
 }
 
-async function screenshotIfPresent(page, outputDir, name, selector) {
-  const locator = page.locator(selector).first();
-  if (await locator.count() && await locator.isVisible()) {
-    await locator.screenshot({ path: join(outputDir, `${name}.png`), timeout: 8000 });
-  }
-}
-
-async function screenshotEveryPage(page, outputDir, prefix) {
-  const pages = page.locator(".page");
-  const count = await pages.count();
-  for (let index = 0; index < count; index += 1) {
-    const locator = pages.nth(index);
-    if (await locator.isVisible()) {
-      await locator.screenshot({
-        path: join(outputDir, `${prefix}-page-${String(index + 1).padStart(4, "0")}.png`),
-        timeout: 10000
-      });
-    }
-  }
-}
-
-async function exportPdf(args) {
-  const context = htmlContext(args.html);
+function pdfOutputContext(args, context) {
   const outputPdf = resolve(args.pdf);
   if (extname(outputPdf).toLowerCase() !== ".pdf") throw new Error("PDF output path must use a .pdf extension");
   const protectedPaths = new Set([...context.allowedFiles].map((file) => resolve(context.rootReal, file)));
   if (protectedPaths.has(outputPdf)) throw new Error("PDF output path must not overwrite the HTML entry or a declared book asset");
   mkdirSync(dirname(outputPdf), { recursive: true });
-  const temporaryPdf = join(dirname(outputPdf), `.${basename(outputPdf)}.${randomUUID()}.tmp.pdf`);
+  return { outputPdf, temporaryPdf: join(dirname(outputPdf), `.${basename(outputPdf)}.${randomUUID()}.tmp.pdf`) };
+}
 
-  return await withServer(context, async (url, origin) => {
-    const browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1200, height: 1600 }, deviceScaleFactor: 1 });
-    try {
-      const diagnostics = await installPageGuards(page, context, origin);
+async function exportPdfInBrowser(browser, context, url, origin, args, readySession = null) {
+  const { outputPdf, temporaryPdf } = pdfOutputContext(args, context);
+  const page = readySession?.page ?? await browser.newPage({ viewport: { width: 1200, height: 1600 }, deviceScaleFactor: 1 });
+  try {
+    const diagnostics = readySession?.diagnostics ?? await installPageGuards(page, context, origin);
+    let readiness = readySession?.report;
+    if (!readySession) {
       await loadBook(page, url, args.wait, diagnostics);
       diagnostics.manifestSource = context.manifest?.source ?? null;
       await page.emulateMedia({ media: "print" });
-      const readiness = await assertReady(page, diagnostics);
-      const sourceManifest = await page.evaluate(() => {
-        const node = document.getElementById("book-data");
-        if (!node) return null;
-        try {
-          return JSON.parse(node.textContent || "{}").sourceManifest || null;
-        } catch {
-          return null;
-        }
-      });
-      await page.pdf({
-        path: temporaryPdf,
-        format: "Letter",
-        printBackground: true,
-        preferCSSPageSize: true,
-        margin: { top: "0", right: "0", bottom: "0", left: "0" },
-        displayHeaderFooter: false
-      });
-      await assertReady(page, diagnostics);
-      const pdf = validatePdfStructure(temporaryPdf, readiness.printSheets, {
-        requireText: readiness.words > 0 && !readiness.imageOnly,
-        sourceManifest
-      });
-      renameSync(temporaryPdf, outputPdf);
-      return { outputPdf, bytes: statSync(outputPdf).size, readiness, pdf };
+      readiness = await assertReady(page, diagnostics);
+    }
+    const sourceManifest = await page.evaluate(() => {
+      const node = document.getElementById("book-data");
+      if (!node) return null;
+      try {
+        return JSON.parse(node.textContent || "{}").sourceManifest || null;
+      } catch {
+        return null;
+      }
+    });
+    await page.pdf({
+      path: temporaryPdf,
+      format: "Letter",
+      printBackground: true,
+      preferCSSPageSize: true,
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
+      displayHeaderFooter: false
+    });
+    await assertReady(page, diagnostics);
+    const pdf = validatePdfStructure(temporaryPdf, readiness.printSheets, {
+      requireText: readiness.words > 0 && !readiness.imageOnly,
+      sourceManifest
+    });
+    renameSync(temporaryPdf, outputPdf);
+    return { outputPdf, bytes: statSync(outputPdf).size, readiness, pdf };
+  } finally {
+    rmSync(temporaryPdf, { force: true });
+    await page.close();
+  }
+}
+
+async function exportPdf(args) {
+  const context = htmlContext(args.html);
+  return await withServer(context, async (url, origin) => {
+    const browser = await chromium.launch();
+    try {
+      return await exportPdfInBrowser(browser, context, url, origin, args);
     } finally {
-      rmSync(temporaryPdf, { force: true });
       await browser.close();
     }
   });
@@ -794,9 +807,13 @@ async function inspectViewport(browser, context, url, origin, {
   viewport,
   outputDir,
   waitMode,
-  media = "screen"
+  media = "screen",
+  captureAllPages = true,
+  sourceIds = [],
+  retain = false
 }) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 1, isMobile: viewport.width < 600 });
+  let keepPage = false;
   try {
     await page.emulateMedia({ media });
     const diagnostics = await installPageGuards(page, context, origin);
@@ -805,8 +822,10 @@ async function inspectViewport(browser, context, url, origin, {
     diagnostics.expectedMobile = viewport.width < 600;
     if (media === "screen") {
       await page.screenshot({ path: join(outputDir, `${name}-viewport.png`), fullPage: false });
-      if (name === "desktop") {
+      if (name === "desktop" && captureAllPages) {
         await screenshotEveryPage(page, outputDir, "desktop");
+      } else if (name === "desktop") {
+        await screenshotSourcePages(page, outputDir, sourceIds);
       } else {
         await screenshotIfPresent(page, outputDir, `${name}-cover`, ".cover, .page");
         const textPages = page.locator(".text-page");
@@ -836,74 +855,134 @@ async function inspectViewport(browser, context, url, origin, {
     for (let index = 0; index < featureSelectors.length; index += 1) {
       await screenshotIfPresent(page, outputDir, `${name}-feature-${String(index + 1).padStart(2, "0")}`, featureSelectors[index]);
     }
-    return await renderedReport(page, diagnostics);
+    const report = await renderedReport(page, diagnostics);
+    if (retain) {
+      keepPage = true;
+      return { report, page, diagnostics };
+    }
+    return report;
   } finally {
-    await page.close();
+    if (!keepPage) await page.close();
   }
+}
+
+async function verifyInBrowser(browser, context, url, origin, args, { retainPrint = false } = {}) {
+  const outputDir = resolve(args["output-dir"]);
+  cleanVerificationOutput(outputDir);
+
+  const profile = verificationProfile(args.profile);
+  const includePrint = profile.includePrint;
+  const sourceIds = String(args["source-ids"] ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  const views = await Promise.all([
+    inspectViewport(browser, context, url, origin, {
+      name: "desktop",
+      viewport: { width: 1200, height: 1600 },
+      outputDir,
+      waitMode: args.wait,
+      captureAllPages: profile.captureAllPages,
+      sourceIds
+    }),
+    inspectViewport(browser, context, url, origin, {
+      name: "mobile",
+      viewport: { width: 390, height: 844 },
+      outputDir,
+      waitMode: args.wait
+    }),
+    ...(includePrint ? [inspectViewport(browser, context, url, origin, {
+      name: "print",
+      viewport: { width: 1200, height: 1600 },
+      outputDir,
+      waitMode: args.wait,
+      media: "print",
+      retain: retainPrint
+    })] : [])
+  ]);
+  const [desktop, mobile, printView] = views;
+  const printSession = retainPrint ? printView : null;
+  const print = retainPrint ? printView.report : printView ?? null;
+  const contactSheet = await createContactSheet(browser, outputDir);
+  const result = {
+    schemaVersion: 2,
+    html: context.htmlPath,
+    htmlBytes: statSync(context.htmlPath).size,
+    screenshots: outputDir,
+    contactSheet: contactSheet.primary,
+    contactSheets: contactSheet.sheets,
+    contactSheetPages: contactSheet.pageCount,
+    desktop,
+    print,
+    mobile,
+    failures: {
+      desktop: reportFailures(desktop),
+      print: print ? reportFailures(print) : [],
+      mobile: reportFailures(mobile)
+    }
+  };
+  if (result.failures.desktop.length || result.failures.print.length || result.failures.mobile.length) result.failed = true;
+  const artifacts = writeVerificationArtifacts(outputDir, result);
+  result.diagnosticSummary = artifacts.diagnostics.counts;
+  writeFileSync(join(outputDir, "render-report.json"), JSON.stringify(result, null, 2));
+  if (printSession) Object.defineProperty(result, "printSession", { value: printSession, enumerable: false });
+  return result;
 }
 
 async function verifyBook(args) {
   const context = htmlContext(args.html);
-  const outputDir = resolve(args["output-dir"]);
-  mkdirSync(outputDir, { recursive: true });
-  const ownedOutput = /^(?:desktop|mobile)-(?:viewport|cover|text-(?:first|last)|feature-\d+|page-\d+)\.png$|^mobile-part-\d+\.png$|^render-report\.json$/;
-  for (const name of readdirSync(outputDir)) {
-    if (ownedOutput.test(name)) rmSync(join(outputDir, name), { force: true });
-  }
-
   return await withServer(context, async (url, origin) => {
     const browser = await chromium.launch();
     try {
-      const [desktop, print, mobile] = await Promise.all([
-        inspectViewport(browser, context, url, origin, {
-          name: "desktop",
-          viewport: { width: 1200, height: 1600 },
-          outputDir,
-          waitMode: args.wait
-        }),
-        inspectViewport(browser, context, url, origin, {
-          name: "print",
-          viewport: { width: 1200, height: 1600 },
-          outputDir,
-          waitMode: args.wait,
-          media: "print"
-        }),
-        inspectViewport(browser, context, url, origin, {
-          name: "mobile",
-          viewport: { width: 390, height: 844 },
-          outputDir,
-          waitMode: args.wait
-        })
-      ]);
-      const result = {
-        html: context.htmlPath,
-        htmlBytes: statSync(context.htmlPath).size,
-        screenshots: outputDir,
-        desktop,
-        print,
-        mobile,
-        failures: {
-          desktop: reportFailures(desktop),
-          print: reportFailures(print),
-          mobile: reportFailures(mobile)
-        }
-      };
-      if (result.failures.desktop.length || result.failures.print.length || result.failures.mobile.length) {
-        result.failed = true;
-      }
-      writeFileSync(join(outputDir, "render-report.json"), JSON.stringify(result, null, 2));
-      return result;
+      return await verifyInBrowser(browser, context, url, origin, args);
     } finally {
       await browser.close();
     }
   });
 }
 
+async function finalizeBook(args) {
+  const context = htmlContext(args.html);
+  return await withServer(context, async (url, origin) => {
+    const browser = await chromium.launch();
+    try {
+      const verification = await verifyInBrowser(browser, context, url, origin, args, { retainPrint: true });
+      if (verification.failed) {
+        await verification.printSession?.page.close();
+        return { mode: "finalize", failed: true, verification };
+      }
+      const pdf = await exportPdfInBrowser(browser, context, url, origin, args, verification.printSession);
+      writeFileSync(join(resolve(args["output-dir"]), "pdf-report.json"), JSON.stringify(pdf, null, 2));
+      return { mode: "finalize", verification, pdf };
+    } finally {
+      await browser.close();
+    }
+  });
+}
+
+function conciseResult(args, result) {
+  const verification = args.mode === "finalize" ? result.verification : (args.mode === "verify" ? result : null);
+  const pdf = args.mode === "finalize" ? result.pdf : (args.mode === "export" ? result : null);
+  const failed = Boolean(result.failed || verification?.failed);
+  return {
+    status: failed ? "fail" : "pass",
+    mode: args.mode,
+    pages: verification?.print?.pages ?? verification?.desktop?.pages ?? pdf?.pdf?.pageCount ?? 0,
+    sourceCoverage: verification?.print?.sourcePreservation?.ratio ?? verification?.desktop?.sourcePreservation?.ratio ?? pdf?.readiness?.sourcePreservation?.ratio ?? null,
+    errors: verification?.diagnosticSummary?.error ?? (failed ? 1 : 0),
+    ...(verification ? { report: join(resolve(args["output-dir"]), "render-report.json") } : {}),
+    ...(pdf ? { pdf: pdf.outputPdf } : {})
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const result = args.mode === "export" ? await exportPdf(args) : await verifyBook(args);
-  console.log(JSON.stringify(result, null, 2));
-  if (result.failed) process.exitCode = 2;
+  const handlers = { export: exportPdf, finalize: finalizeBook, verify: verifyBook };
+  const releaseLock = acquirePipelineLock(dirname(resolve(args.html)));
+  try {
+    const result = await handlers[args.mode](args);
+    console.log(args.format === "json" ? JSON.stringify(result, null, 2) : JSON.stringify(conciseResult(args, result)));
+    if (result.failed || result.verification?.failed) process.exitCode = 2;
+  } finally {
+    releaseLock();
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

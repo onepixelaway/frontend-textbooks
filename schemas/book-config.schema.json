@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "book-config.schema.json",
+  "title": "Frontend Textbooks book configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "author"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "author": { "type": "string", "minLength": 1 },
+    "subtitle": { "type": "string" },
+    "outputDir": { "type": "string", "minLength": 1 },
+    "outputHtml": { "type": "string", "pattern": "^[^/\\\\]+\\.html?$" },
+    "coverImage": { "type": "string" },
+    "coverBandHeight": { "type": "number", "minimum": 2.8, "maximum": 4.4 },
+    "requirePartImages": { "type": "boolean" },
+    "requireDiagrams": { "type": "boolean" },
+    "chapterOpeners": { "type": "boolean" },
+    "chapterClosers": { "type": "object", "additionalProperties": { "type": "string" } },
+    "partImages": { "type": "object", "additionalProperties": { "type": "string" } },
+    "style": { "type": "string", "minLength": 1 },
+    "bookType": { "type": "string", "enum": ["textbook", "manual", "field-guide", "business", "editorial", "coffee-table", "workbook", "literary", "plain-reader"] },
+    "coverKicker": { "type": "string" },
+    "bodyColumns": { "type": "string", "enum": ["text-two", "text-single", "text-three"] },
+    "fontMode": { "type": "string", "enum": ["system", "remote"] }
+  }
+}

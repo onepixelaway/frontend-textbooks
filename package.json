@@ -8,10 +8,11 @@
     "node": ">=20"
   },
   "scripts": {
+    "book": "node scripts/book-pipeline.mjs",
     "build:book": "node scripts/build-html-book.mjs",
-    "check": "node --check scripts/build-html-book.mjs && node --check scripts/book-browser.mjs && node --check scripts/lib/browser-runtime.mjs && node --check scripts/lib/manuscript.mjs && node --check scripts/lib/pdf-structure.mjs && node --check scripts/lib/static-assets.mjs && bash -n scripts/*.sh",
+    "check": "node --check scripts/*.mjs && node --check scripts/lib/*.mjs && node --check themes/*.mjs && node --check themes/*/*.mjs && bash -n scripts/*.sh",
     "setup:browsers": "playwright install chromium",
-    "test": "node --test --test-reporter=spec tests/*.test.mjs"
+    "test": "node --test --test-concurrency=1 --test-reporter=spec tests/*.test.mjs"
   },
   "dependencies": {
     "markdown-it": "14.3.0",

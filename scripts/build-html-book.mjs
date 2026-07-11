@@ -4,6 +4,12 @@ import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "
 import { fileURLToPath } from "node:url";
 import { DEFAULT_THEME_NAME, STYLE_NAMES, getTheme, renderThemeFontLinks, themeColors, themeFontStack } from "../themes/index.mjs";
 import { parseManuscript, wordCount } from "./lib/manuscript.mjs";
+import { assertContract, readContractFile } from "./lib/json-contracts.mjs";
+import { assertPlanMatchesManuscript, assertPlanPolicy, hasPlanException } from "./lib/plan-contract.mjs";
+import { createSourceInventory } from "./lib/source-inventory.mjs";
+import { resolveLocalAsset } from "./lib/local-assets.mjs";
+import { compilePlan } from "./lib/plan-compiler.mjs";
+import { acquirePipelineLock } from "./lib/pipeline-lock.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(scriptDir, "..");
@@ -20,7 +26,7 @@ function numberInRange(value, fallback, min, max) {
 }
 
 function usage() {
-  console.error(`Usage: node scripts/build-html-book.mjs <book.json> <manuscript.md>
+  console.error(`Usage: node scripts/build-html-book.mjs <book.json> <manuscript.md> [book-plan.json]
 
 book.json fields:
   title        required
@@ -42,12 +48,14 @@ book.json fields:
   process.exit(1);
 }
 
-const [configPathArg, manuscriptPathArg] = process.argv.slice(2);
+const [configPathArg, manuscriptPathArg, planPathArg] = process.argv.slice(2);
 if (!configPathArg || !manuscriptPathArg) usage();
 
 const configPath = resolve(configPathArg);
 const manuscriptPath = resolve(manuscriptPathArg);
-const config = JSON.parse(readFileSync(configPath, "utf8"));
+const config = assertContract("book-config", JSON.parse(readFileSync(configPath, "utf8")));
+const planPath = planPathArg ? resolve(planPathArg) : null;
+const plan = planPath ? readContractFile("book-plan", planPath) : null;
 const manuscript = readFileSync(manuscriptPath, "utf8");
 const outputDir = resolve(config.outputDir ?? dirname(configPath));
 const outputHtml = config.outputHtml ?? "index.html";
@@ -61,15 +69,19 @@ const outputPath = resolve(outputDir, outputHtml);
 const coverOptionsPath = resolve(outputDir, "cover-options.html");
 const buildManifestPath = resolve(outputDir, "book-build-manifest.json");
 const buildSummaryPath = resolve(outputDir, "book-build-summary.json");
+const sourceInventoryPath = resolve(outputDir, "source-inventory.json");
+const planReceiptPath = resolve(outputDir, "book-plan-receipt.json");
 const baseCss = readFileSync(resolve(skillDir, "page-base.css"), "utf8");
 
 const generatedPaths = new Map([
   [outputPath, "outputHtml"],
   [coverOptionsPath, "cover options"],
   [buildManifestPath, "build manifest"],
-  [buildSummaryPath, "build summary"]
+  [buildSummaryPath, "build summary"],
+  [sourceInventoryPath, "source inventory"],
+  [planReceiptPath, "plan receipt"]
 ]);
-if (generatedPaths.size !== 4) throw new Error("outputHtml collides with a reserved generated filename.");
+if (generatedPaths.size !== 6) throw new Error("outputHtml collides with a reserved generated filename.");
 for (const [inputPath, label] of [[configPath, "configuration"], [manuscriptPath, "manuscript"]]) {
   if (generatedPaths.has(inputPath)) {
     throw new Error(`${generatedPaths.get(inputPath)} collides with the ${label} input: ${inputPath}`);
@@ -77,6 +89,8 @@ for (const [inputPath, label] of [[configPath, "configuration"], [manuscriptPath
 }
 
 mkdirSync(outputDir, { recursive: true });
+const releaseBuildLock = acquirePipelineLock(outputDir);
+process.once("exit", releaseBuildLock);
 
 function isOutsideDirectory(root, candidate) {
   const path = relative(root, candidate);
@@ -98,22 +112,8 @@ function canonicalRelativeFile(root, candidate, label) {
 }
 
 function localAssetManifestPath(value, label) {
-  const asset = trimmedText(value);
-  if (!asset) return null;
-  if (asset.startsWith("//")) throw new Error(`${label} uses a protocol-relative URL; use an explicit https:// URL.`);
-  if (/^https?:\/\//iu.test(asset) || /^data:image\//iu.test(asset)) return null;
-  if (/^[a-z][a-z\d+.-]*:/iu.test(asset)) {
-    throw new Error(`${label} uses an unsupported asset URL scheme.`);
-  }
-  const encodedPath = asset.replace(/\\/gu, "/").split(/[?#]/u, 1)[0];
-  let pathOnly;
-  try {
-    pathOnly = decodeURIComponent(encodedPath);
-  } catch {
-    throw new Error(`${label} contains invalid URL encoding.`);
-  }
-  if (pathOnly.includes("\0")) throw new Error(`${label} contains an invalid null byte.`);
-  const candidate = resolve(dirname(outputPath), pathOnly);
+  const candidate = resolveLocalAsset(value, dirname(outputPath), label, outputDir);
+  if (!candidate) return null;
   if (!existsSync(candidate)) throw new Error(`${label} does not exist: ${candidate}`);
   if (!lstatSync(candidate).isFile()) throw new Error(`${label} must name a regular file: ${candidate}`);
   if (generatedPaths.has(candidate)) {
@@ -229,6 +229,11 @@ const configMaps = {
 const parsed = parseManuscript(manuscript);
 if (!parsed.chapters.length) throw new Error("No chapters found in manuscript.");
 
+if (plan) {
+  assertPlanMatchesManuscript(plan, parsed, STYLE_NAMES);
+  assertPlanPolicy(plan, config, parsed);
+}
+
 const coverImage = trimmedText(config.coverImage);
 const book = {
   title: plainText(config.title),
@@ -238,11 +243,12 @@ const book = {
   coverKicker: plainText(config.coverKicker ?? "A book"),
   coverImage,
   coverBandHeight: numberInRange(config.coverBandHeight, DEFAULT_COVER_BAND_HEIGHT_IN, 2.8, 4.4),
-  requirePartImages: booleanValue(config.requirePartImages, "requirePartImages", Boolean(coverImage && parsed.parts.length)),
-  requireDiagrams: booleanValue(config.requireDiagrams, "requireDiagrams", defaultRequireDiagrams(config)),
-  chapterOpeners: booleanValue(config.chapterOpeners, "chapterOpeners", false),
-  style: enumValue(config.style, "style", STYLE_NAMES, DEFAULT_THEME_NAME),
-  bodyColumns: enumValue(config.bodyColumns, "bodyColumns", BODY_COLUMN_CLASSES, "text-two")
+  requirePartImages: hasPlanException(plan, "waive-part-images") ? false : booleanValue(config.requirePartImages, "requirePartImages", Boolean(coverImage && parsed.parts.length)),
+  requireDiagrams: hasPlanException(plan, "waive-diagrams") ? false : booleanValue(config.requireDiagrams, "requireDiagrams", defaultRequireDiagrams(config)),
+  chapterOpeners: plan?.layout.chapterOpeners ?? booleanValue(config.chapterOpeners, "chapterOpeners", false),
+  style: plan?.theme.id ?? enumValue(config.style, "style", STYLE_NAMES, DEFAULT_THEME_NAME),
+  bodyColumns: plan?.layout.bodyColumns ?? enumValue(config.bodyColumns, "bodyColumns", BODY_COLUMN_CLASSES, "text-two"),
+  fontMode: config.fontMode ?? "system"
 };
 
 if (!book.title || !book.author) throw new Error("book.json must include non-empty title and author.");
@@ -322,6 +328,7 @@ parsed.parts.forEach((part, index) => {
 assertCompletePartImages(parsed.parts, hasMapEntries(configMaps.partImages), book.requirePartImages);
 assertUniquePartImages(parsed.parts);
 assertPartImagesDoNotReuseCover(parsed.parts, book.coverImage);
+const compiledPlan = compilePlan(plan, parsed, book);
 const partNumbers = new Map(parsed.parts.map((part, index) => [part.id, index + 1]));
 
 for (const chapter of parsed.chapters) {
@@ -335,7 +342,8 @@ function coverBackground() {
 }
 
 function fontLinks() {
-  return renderThemeFontLinks(getTheme(book.style));
+  const remoteApproved = hasPlanException(plan, "allow-remote-fonts");
+  return book.fontMode === "remote" && (!plan || remoteApproved) ? renderThemeFontLinks(getTheme(book.style)) : "";
 }
 
 function themeCss() {
@@ -437,6 +445,13 @@ body { font-size: 10.7pt; }
 .text-page.has-tail-furniture .tail-furniture::before { content: ""; width: 0.08in; min-height: 0.7in; background: var(--accent); }
 .tail-label { margin: 0 0 0.06in; font-family: var(--font-ui); font-size: 7.5pt; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
 .tail-quote { margin: 0; max-width: 5.1in; font-family: var(--font-display); font-size: 16pt; line-height: 1.24; color: var(--heading-ink); text-indent: 0; }
+.planned-callout, .planned-definition { padding: 0.16in 0.18in; border-left: 0.06in solid var(--accent); background: var(--callout-bg); break-inside: avoid; }
+.planned-diagram { padding: 0.18in; border: 1px solid var(--rule); border-radius: 0.06in; background: var(--callout-bg); break-inside: avoid; }
+.diagram-flow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.1in; align-items: stretch; margin-top: 0.1in; }
+.diagram-node { display: grid; place-items: center; min-height: 0.62in; padding: 0.1in; border: 1px solid var(--rule); background: var(--page-bg); text-align: center; }
+.diagram-connector { align-self: center; font: 900 14pt/1 var(--font-ui); color: var(--accent); }
+.planned-table, .planned-checklist { padding: 0.12in 0.16in; border-top: 2px solid var(--accent); border-bottom: 1px solid var(--rule); break-inside: avoid; }
+.planned-quote { padding-left: 0.2in; border-left: 0.04in solid var(--accent); font-family: var(--font-display); font-size: 12pt; font-style: italic; }
 .option-cover .page-inner { position: relative; z-index: 2; display: grid; grid-template-rows: auto 1fr auto auto; padding: 0.7in; }
 .option-cover h1 { align-self: end; max-width: 6.4in; font-size: 70pt; line-height: 0.9; }
 .option-subtitle, .option-author, .cover-route-label { font-family: var(--font-ui); }
@@ -458,6 +473,8 @@ body { font-size: 10.7pt; }
   .part-divider.has-part-image .page-inner { height: auto; min-height: 0; grid-template-rows: auto auto; }
   .cover-image, .route-photo-image, .part-image-frame { position: relative; display: block; min-height: 72vw; inset: auto; }
   .cover-title, .title-grid h1, .part-divider h1, .chapter-title, .option-cover h1 { font-size: 38pt; }
+  .diagram-flow { grid-template-columns: 1fr; }
+  .diagram-connector { justify-self: center; transform: rotate(90deg); }
 }`;
 }
 
@@ -612,7 +629,10 @@ function renderBook() {
 
   const clientChapters = parsed.chapters.map((chapter) => ({
     ...chapter,
-    blocks: chapter.blocks.map(({ expectedText: _expectedText, ...block }) => block)
+    blocks: chapter.blocks.map(({ expectedText: _expectedText, ...block }) => ({
+      ...block,
+      ...(compiledPlan.annotations.has(block.sourceBlockId) ? { plan: compiledPlan.annotations.get(block.sourceBlockId) } : {})
+    }))
   }));
 
   return `<!doctype html>
@@ -656,6 +676,48 @@ function blockNode(block) {
     node.appendChild(template.content);
   }
   node.dataset.sourceBlockId = block.sourceBlockId;
+  if (block.plan) {
+    node.dataset.semanticRole = block.plan.role;
+    node.dataset.plannedTreatment = block.plan.treatment;
+    node.classList.add("planned-" + block.plan.treatment);
+    if (block.plan.treatment === "callout") node.classList.add("callout");
+    if (block.plan.diagramConcepts?.length) node.dataset.diagramConcept = block.plan.diagramConcepts.join(" | ");
+    if (block.plan.treatment === "diagram") {
+      const figure = document.createElement("figure");
+      figure.className = "diagram-card planned-diagram";
+      figure.dataset.sourceBlockId = block.sourceBlockId;
+      figure.dataset.semanticRole = block.plan.role;
+      figure.dataset.plannedTreatment = "diagram";
+      const caption = document.createElement("figcaption");
+      caption.className = "model-label";
+      caption.textContent = block.plan.diagramConcepts?.[0] || ("Structured " + block.plan.role);
+      const content = document.createElement("div");
+      content.className = "diagram-flow";
+      const sourceText = (node.textContent || "").replace(/\\s+/g, " ").trim();
+      let segments = sourceText.match(/[^.!?]+[.!?]?/g)?.map((value) => value.trim()).filter(Boolean) || [];
+      if (segments.length < 2) {
+        const words = sourceText.split(/\\s+/).filter(Boolean);
+        const midpoint = Math.max(1, Math.ceil(words.length / 2));
+        segments = [words.slice(0, midpoint).join(" "), words.slice(midpoint).join(" ")].filter(Boolean);
+      }
+      if (segments.length < 2) segments.push(block.plan.diagramConcepts?.[0] || block.plan.role);
+      segments.forEach((segment, index) => {
+        const diagramNode = document.createElement("div");
+        diagramNode.className = "diagram-node";
+        diagramNode.textContent = segment;
+        content.appendChild(diagramNode);
+        if (index < segments.length - 1) {
+          const connector = document.createElement("span");
+          connector.className = "diagram-connector";
+          connector.setAttribute("aria-hidden", "true");
+          connector.textContent = "→";
+          content.appendChild(connector);
+        }
+      });
+      figure.append(caption, content);
+      return figure;
+    }
+  }
   return node;
 }
 
@@ -891,15 +953,18 @@ writeFileSync(buildSummaryPath, JSON.stringify({
   chapters: parsed.chapters.length,
   parts: parsed.parts.length,
   sourceWords: wordCount(manuscript),
-  outputHtml: relative(process.cwd(), outputPath),
-  generatedAt: new Date().toISOString()
+  outputHtml: relative(process.cwd(), outputPath)
 }, null, 2));
+writeFileSync(sourceInventoryPath, JSON.stringify(createSourceInventory(parsed), null, 2));
+writeFileSync(planReceiptPath, JSON.stringify(compiledPlan.receipt, null, 2));
 
 console.log(JSON.stringify({
   html: outputPath,
   coverOptions: coverOptionsPath,
   manifest: buildManifestPath,
   summary: buildSummaryPath,
+  sourceInventory: sourceInventoryPath,
+  planReceipt: planReceiptPath,
   sourceWords: wordCount(manuscript),
   chapters: parsed.chapters.length,
   parts: parsed.parts.length

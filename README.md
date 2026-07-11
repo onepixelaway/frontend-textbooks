@@ -17,6 +17,10 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 - **Coffee-Table Feel When Appropriate** - Encourages image-led section dividers, spacious editorial pages, generated artwork, and strong cover routes when the manuscript calls for a more collectible book.
 - **Reusable Scaffold** - Includes a Markdown-to-book scaffold with cover options, browser-side pagination, chapter-close furniture, generated part images, mobile collapse behavior, and overflow assertions.
 - **Verification Scripts** - Provides Playwright-backed checks for readiness, allowlisted assets, source coverage, desktop/mobile overflow, every rendered page, and final PDF structure.
+- **Deterministic Pipeline** - One versioned command surface validates strict JSON contracts, caches content-addressed work, emits machine-readable diagnostics, and writes a final hash manifest.
+- **Model/Script Boundary** - Scripts own parsing and production mechanics; the model supplies compact plans, targeted repair decisions, exceptions, and aesthetic approval through schemas.
+- **Tiered Verification** - Fast builds avoid a browser, affected checks render changed source pages plus mobile, and full finalization verifies desktop/print/mobile and exports the PDF in one browser session.
+- **Compact Evidence** - Successful commands print a one-line summary while full reports, source accounting, screenshots, and ordered contact sheets remain on disk.
 
 ## Example Output
 
@@ -69,14 +73,16 @@ Other local coding assistants can use the same core skill if they can read files
 SKILL.md
 ```
 
-The skill file tells the agent when to load:
+The skill file routes the agent to optional references only when needed:
 
-- `STYLE_PRESETS.md`
-- `page-base.css`
-- `html-template.md`
-- `animation-patterns.md`
-- `references/pdf-optimization.md`
-- `scripts/`
+- `references/intake-and-planning.md`
+- `references/visual-system.md`
+- `references/layout-and-html.md`
+- `references/verification-gates.md`
+- `references/reasoning-contracts.md`
+- `references/iteration.md`
+
+`STYLE_PRESETS.md`, `page-base.css`, `html-template.md`, and browser internals are not default reads; agents open them only when changing the corresponding implementation.
 
 Bundled commands resolve from the installed skill directory, so book inputs and outputs can remain in any workspace. Runtime packages are pinned in `package-lock.json`; the browser runner never installs tools on demand.
 
@@ -97,12 +103,32 @@ The skill will:
 5. Export a PDF from the same HTML.
 6. Verify page integrity, overflow, text preservation, generated assets, and mobile readability.
 
+The public command surface is `scripts/book-pipeline.mjs`:
+
+```bash
+# Generate stable source IDs for the model-authored plan.
+node scripts/book-pipeline.mjs inventory --config book.json --manuscript manuscript.md
+
+# Deterministic build checks, without Chromium.
+node scripts/book-pipeline.mjs build --config book.json --manuscript manuscript.md --plan book-plan.json --tier fast
+
+# Changed-page desktop/mobile verification, without PDF export.
+node scripts/book-pipeline.mjs verify --config book.json --manuscript manuscript.md --plan book-plan.json --tier affected
+
+# Full rendered verification, ordered contact sheets, PDF export, and artifact manifest.
+node scripts/book-pipeline.mjs finalize --config book.json --manuscript manuscript.md --plan book-plan.json --tier full
+```
+
+If the plan requires aesthetic review, the first full run returns `review-required`. Inspect every contact sheet, write schema-valid `aesthetic-review.json`, and rerun with `--aesthetic-review aesthetic-review.json`; unchanged rendering and PDF work are reused.
+
+Pipeline stdout is always one compact JSON object, including failures. Full evidence remains on disk; `render-report.json` uses `schemaVersion: 2` and reports only failed or partial source blocks instead of a successful per-block inventory.
+
 ## Included Styles
 
 The default style is the `colbalt` theme, a cobalt editorial system defined in `themes/colbalt`:
 
-- Poppins for headings and labels
-- Halant for body copy
+- Poppins-compatible local fallbacks for headings and labels by default
+- Halant-compatible local serif fallbacks for body copy by default
 - Deep cobalt hierarchy with lighter cobalt-blue accents
 - Warm paper background
 - Two-column editorial reading pages
@@ -125,7 +151,21 @@ frontend-textbooks/
   package-lock.json
   .github/workflows/ci.yml
   references/
+    intake-and-planning.md
+    iteration.md
+    layout-and-html.md
     pdf-optimization.md
+    reasoning-contracts.md
+    verification-gates.md
+    visual-system.md
+  schemas/
+    book-config.schema.json
+    book-plan.schema.json
+    diagnostics.schema.json
+    repair-actions.schema.json
+    repair-tasks.schema.json
+    aesthetic-review.schema.json
+    artifact-manifest.schema.json
   themes/
     alumni/
       index.mjs
@@ -133,6 +173,8 @@ frontend-textbooks/
       index.mjs
     index.mjs
   scripts/
+    book-pipeline.mjs
+    book-contract.mjs
     build-html-book.mjs
     book-browser.mjs
     export-pdf.sh

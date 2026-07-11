@@ -118,6 +118,17 @@ test("build manifest allowlists only generated pages and canonical local assets"
   assert.ok(manifest.source.wordCount > 0);
   assert.ok(manifest.source.blocks.length > 0);
   assert.ok(manifest.source.blocks.every((block) => /^[a-f0-9]{64}$/.test(block.sha256)));
+
+  const inventory = JSON.parse(await readFile(join(paths.outputDir, "source-inventory.json"), "utf8"));
+  assert.deepEqual(inventory.blocks.map((block) => block.ordinal), inventory.blocks.map((_, index) => index));
+  const part = inventory.blocks.find((block) => block.kind === "part");
+  const chapter = inventory.blocks.find((block) => block.kind === "chapter");
+  const paragraph = inventory.blocks.find((block) => block.kind === "p");
+  assert.equal(part.chapterId, null);
+  assert.equal(part.partId, "part-i-build");
+  assert.equal(chapter.partId, "part-i-build");
+  assert.equal(paragraph.chapterId, chapter.chapterId);
+  assert.equal(paragraph.partId, "part-i-build");
 });
 
 test("build manifest includes local images referenced by Markdown", async () => {

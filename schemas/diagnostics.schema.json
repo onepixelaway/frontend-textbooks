@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "diagnostics.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "counts", "items"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "enum": [1] },
+    "status": { "type": "string", "enum": ["pass", "fail"] },
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["error", "warning"],
+      "properties": { "error": { "type": "integer", "minimum": 0 }, "warning": { "type": "integer", "minimum": 0 } }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "code", "severity", "viewport", "message"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "code": { "type": "string", "minLength": 1 },
+          "severity": { "type": "string", "enum": ["error", "warning"] },
+          "viewport": { "type": "string", "enum": ["desktop", "print", "mobile", "pdf"] },
+          "pageId": { "type": "string" },
+          "sourceBlockIds": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+          "sourceContext": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "text"], "properties": { "id": { "type": "string" }, "text": { "type": "string" } } } },
+          "evidencePaths": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+          "actual": { "type": "object" },
+          "message": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

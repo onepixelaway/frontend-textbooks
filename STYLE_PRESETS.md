@@ -60,23 +60,7 @@ Palette roles:
 
 **Default generated image prompt**
 
-The reusable prompt template also lives in `themes/colbalt/index.mjs` as `imagePrompt.template`.
-
-Use this prompt template when generated images are useful and the user has not supplied a different image style. Keep the `[SUBJECT / SCENE]` simple and concrete: one or two main subjects, plus at most one or two clear visual metaphors that refer to recognizable things. Prefer visible objects, scenes, actions, and settings over abstract concepts. Do not ask the image model to illustrate vague abstractions like "decision paths," "system dynamics," "alignment," "follow-through loops," or "stakeholder pressure" unless they are translated into concrete objects such as a doorway, map, table, calendar, notebook, bridge, forked road, clock, stack of papers, or marked-up page.
-
-Preserve the template prose exactly. Replace only `[SUBJECT / SCENE]` with the concrete manuscript-grounded subject. Do not rewrite the template into a full structured image-generation schema. If useful for the tool call, prepend only `Use case`, `Asset type`, and `Constraints` lines; the style, composition, material, and mood language should remain the template text below.
-
-For the default split cover, generate the image for the upper artwork field, not the whole cover: `8.5in x 7.45in`, aspect ratio about `1.14:1`. If the image tool supports explicit dimensions, request `2400x2096` or `2048x1792` pixels; otherwise include "compose for a 1.14:1 wide cover-top frame" in the prompt. Keep the focal subject inside the central safe area with roughly 10-15% padding on all sides so `background-size: cover` does not crop faces, hands, objects, or important marks.
-
-```text
-[SUBJECT / SCENE] in a minimal conceptual editorial illustration style, monochrome cobalt blue and warm white palette, quiet intellectual atmosphere, spacious composition with large areas of negative space.
-
-Use expressive blue ink brushwork, dry-brush streaks, layered screenprint texture, fine contour-line patterns, fingerprint-like wave forms, and soft painterly gradients. Blend a lightly realistic human figure or object with abstract flowing visual metaphors of thought, knowledge, writing, data, memory, or creative process.
-
-Composition should feel calm, sparse, and magazine-editorial: one clear focal subject, surrounded by oversized abstract marks, paper-like forms, flowing ribbons, circular brush loops, or stacked document shapes. Warm off-white paper background, visible canvas/paper grain, subtle ink bleed, imperfect handmade edges, high contrast but soft overall mood.
-
-Elegant, poetic, restrained, modern, contemplative, tactile, printmaking-inspired, riso poster aesthetic, blue ink on paper, no text, no logo, no bright colors, no photorealism, no busy background, no multi-panel grid, no collage of separate images.
-```
+Use `themes/colbalt/index.mjs` as the sole source for `imagePrompt.template`, crop guidance, and subject-placeholder rules. Replace only the concrete subject slot; do not duplicate or rewrite the template here.
 
 **Signature elements**
 

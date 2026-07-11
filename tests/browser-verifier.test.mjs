@@ -56,9 +56,12 @@ async function runBrowser(mode, directory, extra = []) {
   const args = [browserScript, mode, "--html", join(directory, "index.html"), "--wait", "ready"];
   if (mode === "verify") {
     args.push("--output-dir", join(directory, "verification"));
+  } else if (mode === "finalize") {
+    args.push("--output-dir", join(directory, "verification"), "--pdf", join(directory, "book.pdf"));
   } else {
     args.push("--pdf", join(directory, "book.pdf"));
   }
+  args.push("--format", "json");
   try {
     const result = await execFileAsync(process.execPath, [...args, ...extra], {
       cwd: root,
@@ -84,6 +87,53 @@ test("blank custom books fail closed", async () => {
   const result = await runBrowser("verify", directory);
   assert.notEqual(result.status, 0, result.stdout);
   assert.match(`${result.stdout}\n${result.stderr}`, /nonzero text|blank|content/i);
+});
+
+test("default browser output stays compact while full evidence remains on disk", async (t) => {
+  await t.test("success summary", async () => {
+    const directory = await fixture({ html: simpleBook("<p>Compact successful output.</p>") });
+    const result = await runBrowser("verify", directory, ["--format", "summary"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(result.stdout.length < 512, result.stdout);
+    assert.equal(JSON.parse(result.stdout).status, "pass");
+    const report = JSON.parse(await readFile(join(directory, "verification", "render-report.json")));
+    assert.equal(report.schemaVersion, 2);
+  });
+
+  await t.test("failure summary", async () => {
+    const directory = await fixture({ html: simpleBook("   ") });
+    const result = await runBrowser("verify", directory, ["--format", "summary"]);
+    assert.notEqual(result.status, 0);
+    assert.ok(`${result.stdout}${result.stderr}`.length < 2_000, `${result.stdout}\n${result.stderr}`);
+    assert.equal(JSON.parse(result.stdout).status, "fail");
+    const diagnostics = JSON.parse(await readFile(join(directory, "verification", "diagnostics.json")));
+    assert.equal(diagnostics.status, "fail");
+  });
+});
+
+test("affected profile skips print and all-page capture", async () => {
+  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><main class="book"><section class="page"><p data-source-block-id="source-one">First page.</p></section><section class="page"><p data-source-block-id="source-two">Changed second page.</p></section></main></body></html>`;
+  const directory = await fixture({ html });
+  const result = await runBrowser("verify", directory, ["--profile", "affected", "--source-ids", "source-two"]);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.print, null);
+  assert.equal(report.contactSheetPages, 1);
+  await assert.rejects(readFile(join(directory, "verification", "desktop-page-0001.png")), /ENOENT/);
+  await readFile(join(directory, "verification", "desktop-page-0002.png"));
+  await readFile(join(directory, "verification", "desktop-viewport.png"));
+  await readFile(join(directory, "verification", "contact-sheet.png"));
+});
+
+test("failed combined finalization preserves a known-good PDF", async () => {
+  const head = "<style>@page{size:letter;margin:0}.page{width:8.5in;height:22in}.page-inner{height:22in}</style>";
+  const directory = await fixture({ html: simpleBook("<p>Oversized finalization page.</p>", { head }) });
+  const pdfPath = join(directory, "book.pdf");
+  await writeFile(pdfPath, "known-good-pdf");
+  const result = await runBrowser("finalize", directory);
+  assert.notEqual(result.status, 0);
+  assert.equal(await readFile(pdfPath, "utf8"), "known-good-pdf");
+  await assert.rejects(readFile(join(directory, "verification", "pdf-report.json")), /ENOENT/);
 });
 
 test("missing required images fail verification", async () => {
@@ -291,7 +341,7 @@ test("PDF inspection rejects non-Letter pages", async () => {
   assert.ok((await readFile(pdf)).length > 0);
 });
 
-test("a valid contracted book verifies, exports, and renders every PDF page", async () => {
+test("a valid contracted book verifies, exports, and renders every PDF page in one finalization", async () => {
   const sourceManifest = {
     threshold: 0.9,
     totalWords: 8,
@@ -310,19 +360,24 @@ test("a valid contracted book verifies, exports, and renders every PDF page", as
   </main><script type="application/json" id="book-data">${bookData}</script><script>window.__BOOK_READY=true;</script></body></html>`;
   const directory = await fixture({ html });
 
-  const verification = await runBrowser("verify", directory);
-  assert.equal(verification.status, 0, `${verification.stdout}\n${verification.stderr}`);
-  const report = JSON.parse(verification.stdout);
+  const finalization = await runBrowser("finalize", directory);
+  assert.equal(finalization.status, 0, `${finalization.stdout}\n${finalization.stderr}`);
+  const finalized = JSON.parse(finalization.stdout);
+  const report = finalized.verification;
   assert.equal(report.desktop.pages, 2);
   assert.equal(report.print.pages, 2);
   assert.equal(report.mobile.sourcePreservation.ratio, 1);
   await readFile(join(directory, "verification", "desktop-page-0001.png"));
   await readFile(join(directory, "verification", "desktop-page-0002.png"));
   await readFile(join(directory, "verification", "mobile-viewport.png"));
+  await readFile(join(directory, "verification", "contact-sheet.png"));
+  const diagnostics = JSON.parse(await readFile(join(directory, "verification", "diagnostics.json")));
+  assert.equal(diagnostics.status, "pass");
+  assert.equal(diagnostics.items.length, 0);
+  assert.doesNotMatch(JSON.stringify(report), /blockCoverage|manifestSource|expectedText/);
+  assert.ok(JSON.stringify(report).length < 12_000);
 
-  const exported = await runBrowser("export", directory);
-  assert.equal(exported.status, 0, `${exported.stdout}\n${exported.stderr}`);
-  const exportReport = JSON.parse(exported.stdout);
+  const exportReport = finalized.pdf;
   assert.equal(exportReport.pdf.pageCount, 2);
 
   const rendered = join(directory, "pdf-pages");
