@@ -55,6 +55,35 @@ test("model-authored contracts accept structured reasoning and reject prose-shap
   assert.equal(validateContract("book-plan", { ...plan, commentary: "free-form" }).valid, false);
 });
 
+test("artifact manifests use the strict v2 source-block coverage contract", () => {
+  const manifest = {
+    schemaVersion: 2,
+    pipelineVersion: "2.0.0",
+    inputHash: "0".repeat(64),
+    inputs: { manuscript: "1".repeat(64) },
+    outputs: [{ path: "index.pdf", sha256: "2".repeat(64), bytes: 1 }],
+    verification: {
+      tier: "full",
+      passed: true,
+      pages: 1,
+      sourceCoverage: 1,
+      sourceBlockCoverage: 1,
+      contactSheet: ".verification/contact-sheet.png"
+    },
+    reasoning: { plan: "book-plan.json", exceptions: 0, aestheticReview: "pass" }
+  };
+
+  assert.equal(validateContract("artifact-manifest", manifest).valid, true);
+
+  const legacyManifest = structuredClone(manifest);
+  legacyManifest.schemaVersion = 1;
+  delete legacyManifest.verification.sourceBlockCoverage;
+  const legacyResult = validateContract("artifact-manifest", legacyManifest);
+  assert.equal(legacyResult.valid, false);
+  assert.match(legacyResult.errors.join("\n"), /schemaVersion must be one of: 2/);
+  assert.match(legacyResult.errors.join("\n"), /verification\.sourceBlockCoverage is required/);
+});
+
 test("contract files fail with actionable paths", async () => {
   const directory = await mkdtemp(join(tmpdir(), "frontend-textbooks-contract-"));
   temporaryDirectories.push(directory);

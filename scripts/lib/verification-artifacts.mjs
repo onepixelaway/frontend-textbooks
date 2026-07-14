@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createImageContactSheets } from "./contact-sheet.mjs";
 import { createRepairTasks, normalizeDiagnostics } from "./diagnostics.mjs";
 
 export function cleanVerificationOutput(outputDir) {
@@ -49,24 +50,11 @@ export async function createContactSheet(browser, outputDir) {
   const outputNames = readdirSync(outputDir);
   const allImages = outputNames.filter((name) => /^desktop-page-\d+\.png$/u.test(name)).sort();
   if (!allImages.length && outputNames.includes("desktop-viewport.png")) allImages.push("desktop-viewport.png");
-  const chunks = Array.from({ length: Math.ceil(allImages.length / 80) }, (_, index) => allImages.slice(index * 80, (index + 1) * 80));
-  const page = await browser.newPage({ viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 1 });
-  const outputs = [];
-  try {
-    for (let index = 0; index < chunks.length; index += 1) {
-      const cards = chunks[index].map((name) => {
-        const bytes = readFileSync(join(outputDir, name)).toString("base64");
-        return `<figure><img src="data:image/png;base64,${bytes}"><figcaption>${name.replace(/[<&]/g, "")}</figcaption></figure>`;
-      }).join("");
-      const output = join(outputDir, index === 0 ? "contact-sheet.png" : `contact-sheet-${String(index + 1).padStart(3, "0")}.png`);
-      await page.setContent(`<!doctype html><style>body{margin:0;padding:24px;background:#232323;color:#fff;font:14px system-ui}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}figure{margin:0;background:#343434;padding:8px;border-radius:6px}img{display:block;width:100%;height:280px;object-fit:contain;background:#ddd}figcaption{padding-top:6px;overflow-wrap:anywhere}</style><main class="grid">${cards}</main>`);
-      await page.screenshot({ path: output, fullPage: true });
-      outputs.push(output);
-    }
-    return { primary: outputs[0], sheets: outputs, pageCount: allImages.length };
-  } finally {
-    await page.close();
-  }
+  return createImageContactSheets(browser, {
+    inputDir: outputDir,
+    imageNames: allImages,
+    outputPath: join(outputDir, "contact-sheet.png")
+  });
 }
 
 export function writeVerificationArtifacts(outputDir, result) {
@@ -79,7 +67,9 @@ export function writeVerificationArtifacts(outputDir, result) {
     totalWords: source.totalWords ?? 0,
     viewports: Object.fromEntries(["desktop", "print", "mobile"].map((name) => [name, {
       ratio: result[name]?.sourcePreservation?.ratio ?? null,
+      blockRatio: result[name]?.sourcePreservation?.blockRatio ?? null,
       coveredWords: result[name]?.sourcePreservation?.coveredWords ?? 0,
+      coveredBlocks: result[name]?.sourcePreservation?.coveredBlocks ?? 0,
       failedBlockIds: result[name]?.sourcePreservation?.failedBlockIds ?? []
     }])),
     status: diagnostics.status

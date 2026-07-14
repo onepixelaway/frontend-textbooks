@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 function commandResult(command, args) {
   return spawnSync(command, args, {
@@ -83,10 +84,9 @@ function sequenceEnd(actualTokens, expectedTokens, start) {
       actualIndex += 1;
       continue;
     }
-    if (expected.length < 3) return -1;
     let joined = "";
     const fragmentStart = actualIndex;
-    while (actualIndex < actualTokens.length && actualTokens[actualIndex].length <= 2 && joined.length < expected.length) {
+    while (actualIndex < actualTokens.length && joined.length < expected.length) {
       joined += actualTokens[actualIndex];
       actualIndex += 1;
     }
@@ -111,7 +111,7 @@ function sequenceIndex(actualTokens, tokenInitialPositions, expectedTokens, star
   return -1;
 }
 
-export function sourceTokenCoverage(blocks, actualText) {
+export function sourceBlockCoverage(blocks, actualText) {
   const actualTokens = normalizedTokens(actualText);
   const tokenPositions = new Map();
   actualTokens.forEach((token, index) => {
@@ -120,18 +120,38 @@ export function sourceTokenCoverage(blocks, actualText) {
     tokenPositions.set(token[0], positions);
   });
   let cursor = 0;
-  let covered = 0;
-  let total = 0;
-  for (const block of blocks) {
+  let matchedWords = 0;
+  let totalWords = 0;
+  let matchedBlocks = 0;
+  let totalBlocks = 0;
+  const missingBlockIds = [];
+  for (const [index, block] of blocks.entries()) {
     const expectedTokens = normalizedTokens(block.expectedText ?? block.text);
-    total += expectedTokens.length;
+    totalWords += expectedTokens.length;
     if (!expectedTokens.length) continue;
+    totalBlocks += 1;
     const foundAt = sequenceIndex(actualTokens, tokenPositions, expectedTokens, cursor);
-    if (foundAt === -1) continue;
-    covered += expectedTokens.length;
+    if (foundAt === -1) {
+      missingBlockIds.push(String(block.id ?? `block-${index + 1}`));
+      continue;
+    }
+    matchedBlocks += 1;
+    matchedWords += expectedTokens.length;
     cursor = sequenceEnd(actualTokens, expectedTokens, foundAt);
   }
-  return total ? covered / total : 0;
+  return {
+    blockRatio: totalBlocks ? Number((matchedBlocks / totalBlocks).toFixed(4)) : 0,
+    wordRatio: totalWords ? Number((matchedWords / totalWords).toFixed(4)) : 0,
+    matchedBlocks,
+    totalBlocks,
+    matchedWords,
+    totalWords,
+    missingBlockIds
+  };
+}
+
+export function sourceTokenCoverage(blocks, actualText) {
+  return sourceBlockCoverage(blocks, actualText).wordRatio;
 }
 
 export function validatePdfStructure(pdfPath, expectedPages = null, { requireText = false, sourceManifest = null } = {}) {
@@ -160,12 +180,12 @@ export function validatePdfStructure(pdfPath, expectedPages = null, { requireTex
       throw new Error("PDF text extraction is empty for a text-bearing book");
     }
     if (sourceManifest?.blocks?.length) {
-      const ratio = sourceTokenCoverage(sourceManifest.blocks, extracted.stdout);
+      const coverage = sourceBlockCoverage(sourceManifest.blocks, extracted.stdout);
       const threshold = Number(sourceManifest.threshold) || 0.9;
-      if (ratio < threshold) {
-        throw new Error(`PDF source preservation coverage ${(ratio * 100).toFixed(1)}% is below the ${(threshold * 100).toFixed(1)}% threshold`);
+      if (coverage.blockRatio < threshold || coverage.wordRatio < threshold) {
+        throw new Error(`PDF source preservation is below the ${(threshold * 100).toFixed(1)}% threshold (blocks ${(coverage.blockRatio * 100).toFixed(1)}%, words ${(coverage.wordRatio * 100).toFixed(1)}%)`);
       }
-      structure.textPreservation = { ratio: Number(ratio.toFixed(4)), threshold };
+      structure.textPreservation = { ratio: coverage.wordRatio, threshold, ...coverage };
     }
   }
   return structure;
@@ -183,20 +203,72 @@ export function renderPdfPages(pdfPath, outputPrefix) {
   }
 }
 
+function sourceManifestFromHtml(htmlPath) {
+  const html = readFileSync(htmlPath, "utf8");
+  const match = html.match(/<script\b[^>]*\bid=["']book-data["'][^>]*>([\s\S]*?)<\/script>/iu);
+  if (!match) throw new Error(`Cannot find #book-data in companion HTML: ${htmlPath}`);
+  let bookData;
+  try {
+    bookData = JSON.parse(match[1]);
+  } catch (error) {
+    throw new Error(`Cannot parse #book-data in companion HTML: ${error.message}`);
+  }
+  if (!bookData.sourceManifest?.blocks?.length) {
+    throw new Error(`Companion HTML has no sourceManifest blocks: ${htmlPath}`);
+  }
+  return bookData.sourceManifest;
+}
+
+function companionHtml(options) {
+  const html = options.html;
+  if (html) return resolve(html);
+  const manifestPath = options.manifest;
+  if (!manifestPath) return null;
+  const absoluteManifest = resolve(manifestPath);
+  const manifest = JSON.parse(readFileSync(absoluteManifest, "utf8"));
+  if (!manifest.entry || typeof manifest.entry !== "string") {
+    throw new Error(`Build manifest has no HTML entry: ${absoluteManifest}`);
+  }
+  return resolve(dirname(absoluteManifest), manifest.entry);
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  const pdfPath = process.argv[2];
+  let cli;
+  try {
+    cli = parseArgs({
+      args: process.argv.slice(2),
+      allowPositionals: true,
+      options: {
+        html: { type: "string" },
+        manifest: { type: "string" },
+        "require-text": { type: "boolean" },
+        render: { type: "string" },
+        report: { type: "string" }
+      },
+      strict: true
+    });
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+  const pdfPath = cli.positionals[0];
   if (!pdfPath) {
-    console.error("Usage: node scripts/lib/pdf-structure.mjs <path-to-pdf>");
+    console.error("Usage: node scripts/lib/pdf-structure.mjs <path-to-pdf> [--html index.html | --manifest book-build-manifest.json] [--require-text] [--render prefix] [--report report.json]");
     process.exit(1);
   }
   try {
-    const structure = validatePdfStructure(resolve(pdfPath));
-    const renderIndex = process.argv.indexOf("--render");
-    if (renderIndex !== -1) {
-      const outputPrefix = process.argv[renderIndex + 1];
-      if (!outputPrefix) throw new Error("--render requires an output prefix");
+    const htmlPath = companionHtml(cli.values);
+    const sourceManifest = htmlPath ? sourceManifestFromHtml(htmlPath) : null;
+    const structure = validatePdfStructure(resolve(pdfPath), null, {
+      requireText: Boolean(cli.values["require-text"] || sourceManifest),
+      sourceManifest
+    });
+    const outputPrefix = cli.values.render;
+    if (outputPrefix) {
       renderPdfPages(resolve(pdfPath), resolve(outputPrefix));
     }
+    const reportPath = cli.values.report;
+    if (reportPath) writeFileSync(resolve(reportPath), JSON.stringify(structure, null, 2));
     process.stdout.write(`${structure.pageCount}\n`);
   } catch (error) {
     console.error(error.message);

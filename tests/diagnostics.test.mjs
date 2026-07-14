@@ -5,14 +5,35 @@ import { createRepairTasks, normalizeDiagnostics, validateRepairActions } from "
 
 test("normalizes verifier findings into stable coded diagnostics", () => {
   const reports = {
-    desktop: { ready: true, diagnostics: {}, sourcePreservation: { required: true, ratio: 1, threshold: 0.9 }, fixedPageOverflows: [{ page: "page-2", reasons: ["vertical 12px"] }], diagramCount: 1 },
-    print: { ready: true, diagnostics: {}, sourcePreservation: { required: true, ratio: 1, threshold: 0.9 }, diagramCount: 1 },
-    mobile: { ready: true, diagnostics: {}, sourcePreservation: { required: true, ratio: 0.5, threshold: 0.9, failedBlockIds: ["source-p-1"], failedBlocks: [{ id: "source-p-1", text: "Missing source text" }] }, mobileColumnFailures: [{ frame: "page-2", columns: "2" }], diagramCount: 1 }
+    desktop: { ready: true, diagnostics: {}, sourcePreservation: { required: true, ratio: 1, blockRatio: 1, threshold: 0.9 }, fixedPageOverflows: [{ page: "page-2", reasons: ["vertical 12px"] }], diagramCount: 1 },
+    print: { ready: true, diagnostics: {}, sourcePreservation: { required: true, ratio: 1, blockRatio: 1, threshold: 0.9 }, diagramCount: 1 },
+    mobile: { ready: true, diagnostics: {}, sourcePreservation: { required: true, ratio: 0.5, blockRatio: 0.5, threshold: 0.9, failedBlockIds: ["source-p-1"], failedBlocks: [{ id: "source-p-1", text: "Missing source text" }] }, mobileColumnFailures: [{ frame: "page-2", columns: "2" }], diagramCount: 1 }
   };
   const result = normalizeDiagnostics(reports);
   assertContract("diagnostics", result);
   assert.deepEqual(result.items.map((item) => item.code), ["PAGE_OVERFLOW", "MOBILE_MULTICOLUMN", "SOURCE_COVERAGE_LOW"]);
   assert.deepEqual(result.items[2].sourceBlockIds, ["source-p-1"]);
+});
+
+test("fails diagnostics when block coverage is low but word coverage passes", () => {
+  const result = normalizeDiagnostics({
+    desktop: {
+      ready: true,
+      diagnostics: {},
+      sourcePreservation: {
+        required: true,
+        ratio: 0.95,
+        blockRatio: 0.5,
+        threshold: 0.9,
+        failedBlockIds: ["source-short"]
+      },
+      diagramCount: 0
+    }
+  });
+  assert.equal(result.status, "fail");
+  assert.equal(result.counts.error, 1);
+  assert.equal(result.items[0].code, "SOURCE_COVERAGE_LOW");
+  assert.match(result.items[0].message, /words 95\.0%, blocks 50\.0%/);
 });
 
 test("creates compact, validated model repair tasks only for failures", () => {

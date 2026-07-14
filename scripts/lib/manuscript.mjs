@@ -2,6 +2,7 @@ import MarkdownIt from "markdown-it";
 import { sha256 } from "./content-hash.mjs";
 
 const SOURCE_PRESERVATION_THRESHOLD = 0.9;
+const H3_CHAPTER_DIRECTIVE = /\s*\{chapter\}\s*$/iu;
 
 const markdown = new MarkdownIt({
   html: false,
@@ -167,6 +168,26 @@ export function parseManuscript(source) {
     chapters.push(currentChapter);
   }
 
+  function addChapter(title) {
+    const isIntroduction = /^Introduction\b/iu.test(title);
+    if (!isIntroduction) chapterCounter += 1;
+    const chapterId = allocateStructuralId(title, `chapter-${String(chapters.length + 1).padStart(2, "0")}`);
+    const sourceRecord = sourceRecords.create("chapter", title, {
+      chapterId,
+      partId: currentPart?.id ?? null
+    });
+    currentChapter = {
+      id: chapterId,
+      number: isIntroduction ? "Introduction" : String(chapterCounter),
+      sortNumber: chapterCounter,
+      title,
+      part: currentPart,
+      blocks: [],
+      sourceBlockId: sourceRecord.id
+    };
+    chapters.push(currentChapter);
+  }
+
   for (const tokens of groups) {
     const first = tokens[0];
     const expectedText = tokensText(tokens);
@@ -192,23 +213,14 @@ export function parseManuscript(source) {
         continue;
       }
 
-      const isIntroduction = /^Introduction\b/iu.test(expectedText);
-      if (!isIntroduction) chapterCounter += 1;
-      const chapterId = allocateStructuralId(expectedText, `chapter-${String(chapters.length + 1).padStart(2, "0")}`);
-      const sourceRecord = sourceRecords.create("chapter", expectedText, {
-        chapterId,
-        partId: currentPart?.id ?? null
-      });
-      currentChapter = {
-        id: chapterId,
-        number: isIntroduction ? "Introduction" : String(chapterCounter),
-        sortNumber: chapterCounter,
-        title: expectedText,
-        part: currentPart,
-        blocks: [],
-        sourceBlockId: sourceRecord.id
-      };
-      chapters.push(currentChapter);
+      addChapter(expectedText);
+      continue;
+    }
+
+    if (first.type === "heading_open" && first.tag === "h3" && H3_CHAPTER_DIRECTIVE.test(expectedText)) {
+      const title = expectedText.replace(H3_CHAPTER_DIRECTIVE, "").trim();
+      if (!title) throw new Error("An H3 {chapter} directive must include a chapter title.");
+      addChapter(title);
       continue;
     }
 
@@ -224,6 +236,11 @@ export function parseManuscript(source) {
       expectedText: sourceRecord?.expectedText ?? "",
       sourceBlockId: sourceRecord?.id ?? null
     });
+  }
+
+  const emptyChapters = chapters.filter((chapter) => chapter.blocks.length === 0);
+  if (emptyChapters.length) {
+    throw new Error(`Empty chapter container(s): ${emptyChapters.map((chapter) => chapter.title).join("; ")}. Add content, remove the heading, or mark a parent divider as \"Part\".`);
   }
 
   const normalizedSource = markdownSource.normalize("NFC");

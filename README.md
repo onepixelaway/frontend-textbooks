@@ -179,10 +179,13 @@ frontend-textbooks/
     book-browser.mjs
     export-pdf.sh
     export-ready-pdf.sh
+    export-local-chrome.sh
     verify-html-book.sh
     verify-rendered-book.sh
     inspect-pdf.sh
     run-book-browser.sh
+    create-contact-sheet.mjs
+    pdf-inspection.mjs
   tests/
 ```
 

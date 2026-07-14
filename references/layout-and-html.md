@@ -8,8 +8,9 @@ Use semantic HTML and the bundled scaffold for ordinary Markdown prose. Customiz
 - Keep covers, dividers, plates, figures, tables, tools, and callouts atomic.
 - Use measured `.page.text-page` pagination for designed body prose. Overflow creates a new page; it never clips.
 - Keep headings with their first paragraph/list. Avoid orphaned captions and short stranded columns.
-- Use `.text-short-single`, a stacked layout, or a deliberate closer for short chapter tails.
+- Let the paginator measure chapter tails: very short tails become `.text-tail`, medium-short tails with natural block boundaries become `.text-stack`, and nearly full pages retain their configured columns. It may rebalance one or two complete blocks from the preceding page.
 - Reserve layout space for bottom furniture; never position it over prose.
+- Mark custom feature pages with `data-verify-feature`; legacy `.feature-page`, `.scorecard-page`, and `.numbers-page` classes remain discoverable.
 
 ## Mobile
 

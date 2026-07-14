@@ -38,6 +38,24 @@ function diagnostic(code, viewport, value, index, message = "") {
   };
 }
 
+function sourceCoverageFailure(sourcePreservation) {
+  if (!sourcePreservation?.required) return null;
+  const threshold = Number(sourcePreservation.threshold);
+  const wordRatio = Number(sourcePreservation.ratio);
+  const blockRatio = Number(sourcePreservation.blockRatio);
+  const validThreshold = Number.isFinite(threshold);
+  const wordCoverageLow = !Number.isFinite(wordRatio) || !validThreshold || wordRatio < threshold;
+  const blockCoverageLow = !Number.isFinite(blockRatio) || !validThreshold || blockRatio < threshold;
+  if (!wordCoverageLow && !blockCoverageLow) return null;
+  const percentage = (ratio) => Number.isFinite(ratio) ? `${(ratio * 100).toFixed(1)}%` : "missing";
+  return {
+    threshold,
+    wordRatio: Number.isFinite(wordRatio) ? wordRatio : null,
+    blockRatio: Number.isFinite(blockRatio) ? blockRatio : null,
+    message: `Source preservation is below the ${percentage(threshold)} threshold (words ${percentage(wordRatio)}, blocks ${percentage(blockRatio)})`
+  };
+}
+
 export function normalizeDiagnostics(reports) {
   const items = [];
   for (const viewport of ["desktop", "print", "mobile"]) {
@@ -51,15 +69,17 @@ export function normalizeDiagnostics(reports) {
     for (const { field, code } of GUARD_CHECKS) {
       values(report.diagnostics?.[field]).forEach((value, index) => items.push(diagnostic(code, viewport, value, index, String(value))));
     }
+    const coverageFailure = sourceCoverageFailure(report.sourcePreservation);
     if (report.sourcePreservation?.errors?.length) {
       report.sourcePreservation.errors.forEach((value, index) => items.push(diagnostic("SOURCE_CONTRACT_INVALID", viewport, {}, index, value)));
-    } else if (report.sourcePreservation?.required && report.sourcePreservation.ratio < report.sourcePreservation.threshold) {
+    } else if (coverageFailure) {
       items.push(diagnostic("SOURCE_COVERAGE_LOW", viewport, {
         sourceBlockIds: report.sourcePreservation.failedBlockIds ?? [],
-        ratio: report.sourcePreservation.ratio,
-        threshold: report.sourcePreservation.threshold,
+        wordRatio: coverageFailure.wordRatio,
+        blockRatio: coverageFailure.blockRatio,
+        threshold: coverageFailure.threshold,
         sourceContext: report.sourcePreservation.failedBlocks ?? []
-      }, 0, `Source coverage ${report.sourcePreservation.ratio} is below ${report.sourcePreservation.threshold}`));
+      }, 0, coverageFailure.message));
     }
     for (const { field, code } of REPORT_CHECKS) {
       values(report[field]).forEach((value, index) => items.push(diagnostic(code, viewport, value, index)));

@@ -11,6 +11,8 @@
 
 Preserve existing headings and paragraph order. Typical structure: cover, title, optional copyright/colophon, contents, source front matter, chapters/parts, figures/tools, and supported back matter.
 
+The scaffold treats H1 as book metadata, H2 as chapters (or parts when the heading begins with `Part`), and H3/H4 as interior section headings. To intentionally promote one H3, append the explicit directive `{chapter}`. Empty chapter containers fail validation instead of producing hollow pages.
+
 For missing headings, infer natural boundaries without summarizing prose away. Keep rough notes or duplicate boilerplate unless the user authorized editorial cleanup.
 
 ## Visual inventory
@@ -22,5 +24,7 @@ For each proposed visual, state its job, grammar, source IDs, placement, and rat
 ## Covers and section art
 
 For editorial, business, HBR-like, coffee-table, or visually led books, explore 4–5 materially different cover routes. Ensure title readability at thumbnail size, one dominant idea, clear author placement, and no generic title-page treatment.
+
+Set `selectedCoverRoute` to `type`, `symbol`, `photo`, `minimal`, or `press`; the cover-options page and final cover use the same renderer. Use `themeOverrides` only for known palette keys and hex colors when adapting a preset without creating a new theme, for example `{"heading":"#003F88","accent":"#009C3B"}`.
 
 Use distinct assets for the cover and every illustrated part divider. Keep a coherent visual series while varying the manuscript-grounded subject. Obtain prompt templates and target crop guidance from the active theme module; do not duplicate prompt prose elsewhere.

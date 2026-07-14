@@ -6,12 +6,12 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "pipelineVersion", "inputHash", "inputs", "outputs", "verification", "reasoning"],
   "properties": {
-    "schemaVersion": { "type": "integer", "enum": [1] },
+    "schemaVersion": { "type": "integer", "enum": [2] },
     "pipelineVersion": { "type": "string", "minLength": 1 },
     "inputHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "inputs": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" } },
     "outputs": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["path", "sha256", "bytes"], "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "bytes": { "type": "integer", "minimum": 1 } } } },
-    "verification": { "type": "object", "additionalProperties": false, "required": ["tier", "passed", "pages", "sourceCoverage", "contactSheet"], "properties": { "tier": { "type": "string", "enum": ["fast", "affected", "full"] }, "passed": { "type": "boolean" }, "pages": { "type": "integer", "minimum": 0 }, "sourceCoverage": { "type": "number", "minimum": 0, "maximum": 1 }, "contactSheet": { "type": "string" } } },
+    "verification": { "type": "object", "additionalProperties": false, "required": ["tier", "passed", "pages", "sourceCoverage", "sourceBlockCoverage", "contactSheet"], "properties": { "tier": { "type": "string", "enum": ["fast", "affected", "full"] }, "passed": { "type": "boolean" }, "pages": { "type": "integer", "minimum": 0 }, "sourceCoverage": { "type": "number", "minimum": 0, "maximum": 1 }, "sourceBlockCoverage": { "type": "number", "minimum": 0, "maximum": 1 }, "contactSheet": { "type": "string" } } },
     "reasoning": { "type": "object", "additionalProperties": false, "required": ["plan", "exceptions", "aestheticReview"], "properties": { "plan": { "type": "string" }, "exceptions": { "type": "integer", "minimum": 0 }, "aestheticReview": { "type": "string", "enum": ["not-required", "requested", "pass", "revise"] } } }
   }
 }

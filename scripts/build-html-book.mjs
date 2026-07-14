@@ -10,14 +10,22 @@ import { createSourceInventory } from "./lib/source-inventory.mjs";
 import { resolveLocalAsset } from "./lib/local-assets.mjs";
 import { compilePlan } from "./lib/plan-compiler.mjs";
 import { acquirePipelineLock } from "./lib/pipeline-lock.mjs";
+import { serializeBookClientProgram } from "./lib/book-client-program.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(scriptDir, "..");
 const LETTER_WIDTH_IN = 8.5;
 const LETTER_HEIGHT_IN = 11;
 const DEFAULT_COVER_BAND_HEIGHT_IN = 3.55;
-const SHORT_SINGLE_CHAR_LIMIT = 1300;
 const BODY_COLUMN_CLASSES = ["text-two", "text-single", "text-three"];
+const COVER_ROUTES = Object.freeze([
+  { id: "type", label: "Type as image", decoration: () => "" },
+  { id: "symbol", label: "Conceptual symbol", decoration: () => '<div class="route-symbol-mark" aria-hidden="true"><span></span><span></span><span></span></div>' },
+  { id: "photo", label: "Editorial image route", decoration: () => '<div class="route-photo-image" aria-hidden="true"></div>' },
+  { id: "minimal", label: "High-contrast minimal", decoration: () => '<div class="route-minimal-mark" aria-hidden="true"></div>' },
+  { id: "press", label: "Press / series system", decoration: (book) => `<div class="route-press-mark" aria-hidden="true"></div><div class="route-press-series" aria-hidden="true">${escapeHtml(book.bookType)}</div>` }
+]);
+const COVER_ROUTE_IDS = COVER_ROUTES.map((route) => route.id);
 
 function numberInRange(value, fallback, min, max) {
   const parsed = Number(value);
@@ -43,6 +51,8 @@ book.json fields:
   chapterClosers optional object keyed by chapter id, title, or number for generated chapter-close copy
   partImages   optional object keyed by part id, title, label, or number for generated part-divider art; if provided, must cover every part and use unique values
   style         optional: ${STYLE_NAMES.join(" | ")}
+  themeOverrides optional object of known theme color keys using hex colors
+  selectedCoverRoute optional: ${COVER_ROUTE_IDS.join(" | ")}, default: photo
   bodyColumns   optional: ${BODY_COLUMN_CLASSES.join(" | ")}, default: text-two
 `);
   process.exit(1);
@@ -247,6 +257,8 @@ const book = {
   requireDiagrams: hasPlanException(plan, "waive-diagrams") ? false : booleanValue(config.requireDiagrams, "requireDiagrams", defaultRequireDiagrams(config)),
   chapterOpeners: plan?.layout.chapterOpeners ?? booleanValue(config.chapterOpeners, "chapterOpeners", false),
   style: plan?.theme.id ?? enumValue(config.style, "style", STYLE_NAMES, DEFAULT_THEME_NAME),
+  themeOverrides: config.themeOverrides ?? {},
+  selectedCoverRoute: enumValue(config.selectedCoverRoute, "selectedCoverRoute", COVER_ROUTE_IDS, "photo"),
   bodyColumns: plan?.layout.bodyColumns ?? enumValue(config.bodyColumns, "bodyColumns", BODY_COLUMN_CLASSES, "text-two"),
   fontMode: config.fontMode ?? "system"
 };
@@ -254,13 +266,13 @@ const book = {
 if (!book.title || !book.author) throw new Error("book.json must include non-empty title and author.");
 const matchingManuscriptTitle = parsed.metadata.find((entry) => entry.title === book.title);
 
-function firstParagraph(chapter) {
-  const block = chapter.blocks.find((candidate) => candidate.type === "p");
+function firstContentBlock(chapter) {
+  const block = chapter.blocks.find((candidate) => candidate.expectedText && !/^h[1-6]$/u.test(candidate.type));
   return block?.expectedText ?? plainText(block?.html ?? "");
 }
 
 function excerpt(chapter, words = 42) {
-  const text = plainText(firstParagraph(chapter));
+  const text = plainText(firstContentBlock(chapter));
   const parts = text.split(/\s+/).filter(Boolean);
   return parts.slice(0, words).join(" ") + (parts.length > words ? "." : "");
 }
@@ -317,7 +329,7 @@ function assertPartImagesDoNotReuseCover(parts, coverImage) {
 }
 
 function sourceTailText(chapter) {
-  const sample = plainText(firstParagraph(chapter)) || chapter.title;
+  const sample = plainText(firstContentBlock(chapter)) || chapter.title;
   return sample.split(/(?<=[.!?])\s+/).find((part) => part.length > 48) || chapter.title;
 }
 
@@ -336,11 +348,6 @@ for (const chapter of parsed.chapters) {
   chapter.tailText = clipText(closer || sourceTailText(chapter));
 }
 
-function coverBackground() {
-  if (!book.coverImage) return "";
-  return `background-image: ${cssUrl(book.coverImage)};`;
-}
-
 function fontLinks() {
   const remoteApproved = hasPlanException(plan, "allow-remote-fonts");
   return book.fontMode === "remote" && (!plan || remoteApproved) ? renderThemeFontLinks(getTheme(book.style)) : "";
@@ -348,7 +355,7 @@ function fontLinks() {
 
 function themeCss() {
   const theme = getTheme(book.style);
-  const colors = themeColors(theme);
+  const colors = themeColors(theme, book.themeOverrides);
   const heading = colors.heading ?? colors.ink;
   const deck = colors.deck ?? colors.steel;
   const muted = colors.muted;
@@ -400,9 +407,6 @@ function bookCss() {
   return `
 body { font-size: 10.7pt; }
 .book-controls a { font: 600 13px/1 var(--font-ui); border: 1px solid var(--rule); border-radius: 6px; padding: 9px 12px; color: var(--ink); background: var(--page-bg); text-decoration: none; }
-.cover { background: var(--cover-band, var(--heading-ink)); }
-.cover .page-inner { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: var(--cover-band-height); min-height: var(--cover-band-height); display: grid; align-content: center; padding: 0.48in 0.62in 0.56in; color: #fff; background: var(--cover-band, var(--heading-ink)); }
-.cover-image { position: absolute; inset: 0 0 var(--cover-band-height) 0; background: linear-gradient(135deg, color-mix(in srgb, var(--page-bg) 84%, white), color-mix(in srgb, var(--soft-accent) 18%, var(--page-bg))); background-size: cover; background-position: center; ${coverBackground()} }
 .cover-kicker, .chapter-kicker, .part-label, .model-label { font-family: var(--font-ui); font-size: 8pt; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; color: var(--label-ink); }
 .cover-kicker { color: #fff; }
 .cover-kicker::after { content: ""; display: block; width: 0.62in; height: 0.06in; margin: 0.14in 0 0.18in; background: var(--accent); }
@@ -453,7 +457,8 @@ body { font-size: 10.7pt; }
 .planned-table, .planned-checklist { padding: 0.12in 0.16in; border-top: 2px solid var(--accent); border-bottom: 1px solid var(--rule); break-inside: avoid; }
 .planned-quote { padding-left: 0.2in; border-left: 0.04in solid var(--accent); font-family: var(--font-display); font-size: 12pt; font-style: italic; }
 .option-cover .page-inner { position: relative; z-index: 2; display: grid; grid-template-rows: auto 1fr auto auto; padding: 0.7in; }
-.option-cover h1 { align-self: end; max-width: 6.4in; font-size: 70pt; line-height: 0.9; }
+.option-cover h1 { align-self: end; min-width: 0; max-width: 6.4in; overflow-wrap: anywhere; font-size: 70pt; line-height: 0.9; }
+.cover.option-cover h1 { font-size: 44pt; }
 .option-subtitle, .option-author, .cover-route-label { font-family: var(--font-ui); }
 .route-type { background: var(--ink); color: #fff; }
 .route-type h1, .route-type p { color: #fff; }
@@ -465,30 +470,23 @@ body { font-size: 10.7pt; }
 .route-photo h1, .route-photo p { color: #fff; }
 .route-photo-image { position: absolute; inset: 0 0 var(--cover-band-height) 0; background: ${book.coverImage ? `${cssUrl(book.coverImage)} center/cover no-repeat` : "linear-gradient(135deg, var(--page-bg), var(--soft-accent))"}; }
 .route-minimal-mark { position: absolute; right: 0.7in; top: 0.7in; width: 1.1in; height: 7.7in; background: var(--accent); }
+.route-press { background: var(--page-bg); }
+.route-press .page-inner { margin: 0.32in; min-height: calc(11in - 0.64in); height: calc(11in - 0.64in); border: 0.12in solid var(--cover-band); padding: 0.58in; }
+.route-press-mark { position: absolute; left: 0.32in; right: 0.32in; top: 1.42in; height: 0.2in; background: repeating-linear-gradient(90deg, var(--cover-band) 0 0.45in, transparent 0.45in 0.58in); }
+.route-press-series { position: absolute; right: 0.58in; top: 0.58in; font: 900 8pt/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase; color: var(--cover-band); }
+.route-symbol .cover-kicker, .route-minimal .cover-kicker, .route-press .cover-kicker { color: var(--label-ink); }
 @media screen and (max-width: 920px) {
   .book { gap: 0; }
   .page { margin-bottom: 18px; }
   .text-page { margin-bottom: 0; }
-  .cover .page-inner, .route-photo .page-inner { position: relative; height: auto; min-height: 0; }
+  .cover .page-inner, .route-photo .page-inner { position: relative; inset: auto; width: 100%; height: auto; min-height: 0; }
+  .route-press .page-inner { width: 92%; height: auto; min-height: 0; margin: 4%; }
   .part-divider.has-part-image .page-inner { height: auto; min-height: 0; grid-template-rows: auto auto; }
   .cover-image, .route-photo-image, .part-image-frame { position: relative; display: block; min-height: 72vw; inset: auto; }
   .cover-title, .title-grid h1, .part-divider h1, .chapter-title, .option-cover h1 { font-size: 38pt; }
   .diagram-flow { grid-template-columns: 1fr; }
   .diagram-connector { justify-self: center; transform: rotate(90deg); }
 }`;
-}
-
-function renderCover() {
-  return `
-<section class="page cover" id="cover" aria-label="Cover">
-  <div class="cover-image" aria-hidden="true"></div>
-  <div class="page-inner">
-    <p class="cover-kicker no-indent">${escapeHtml(book.coverKicker)}</p>
-    <h1 class="cover-title">${escapeHtml(book.title)}</h1>
-    ${book.subtitle ? `<p class="cover-subtitle no-indent">${escapeHtml(book.subtitle)}</p>` : ""}
-    <p class="cover-author no-indent">by ${escapeHtml(book.author)}</p>
-  </div>
-</section>`;
 }
 
 function renderTitlePage() {
@@ -564,12 +562,31 @@ function renderChapterOpener(chapter) {
 </section>`;
 }
 
-function renderCoverRouteCopy(label) {
+function renderCoverRouteCopy(label, final = false) {
   return `
-          <p class="cover-route-label no-indent">${escapeHtml(label)}</p>
+          <p class="${final ? "cover-kicker" : "cover-route-label"} no-indent">${escapeHtml(final ? book.coverKicker : label)}</p>
           <h1>${escapeHtml(book.title)}</h1>
           ${book.subtitle ? `<p class="option-subtitle no-indent">${escapeHtml(book.subtitle)}</p>` : ""}
           <p class="option-author no-indent">by ${escapeHtml(book.author)}</p>`;
+}
+
+function renderCoverRoute(route, { final = false } = {}) {
+  if (!route) throw new Error(`Unsupported cover route: ${book.selectedCoverRoute}`);
+  const routeClass = `route-${route.id}`;
+  const classes = ["page", "option-cover", ...(final ? ["cover"] : []), routeClass].join(" ");
+  const decoration = route.decoration(book);
+  const label = route.id === "photo" && book.coverImage ? `${route.label} / candidate` : route.label;
+  return `
+      <section class="${classes}"${final ? ' id="cover" aria-label="Cover"' : ""} data-cover-route="${route.id}">
+        ${decoration}
+        <div class="page-inner">
+          ${renderCoverRouteCopy(label, final)}
+        </div>
+      </section>`;
+}
+
+function renderCover() {
+  return renderCoverRoute(COVER_ROUTES.find((route) => route.id === book.selectedCoverRoute), { final: true });
 }
 
 function renderCoverOptions() {
@@ -585,29 +602,7 @@ function renderCoverOptions() {
 <body>
   <main class="book-shell">
     <article class="book">
-      <section class="page option-cover route-type">
-        <div class="page-inner">
-          ${renderCoverRouteCopy("Type as image")}
-        </div>
-      </section>
-      <section class="page option-cover route-symbol">
-        <div class="route-symbol-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="page-inner">
-          ${renderCoverRouteCopy("Conceptual symbol")}
-        </div>
-      </section>
-      <section class="page option-cover route-photo">
-        <div class="route-photo-image" aria-hidden="true"></div>
-        <div class="page-inner">
-          ${renderCoverRouteCopy(`Editorial image route${book.coverImage ? " / candidate" : ""}`)}
-        </div>
-      </section>
-      <section class="page option-cover route-minimal">
-        <div class="route-minimal-mark" aria-hidden="true"></div>
-        <div class="page-inner">
-          ${renderCoverRouteCopy("High-contrast minimal")}
-        </div>
-      </section>
+      ${COVER_ROUTES.map((route) => renderCoverRoute(route)).join("\n")}
     </article>
   </main>
 </body>
@@ -653,272 +648,11 @@ function renderBook() {
     <article class="book" id="book" data-require-part-images="${book.requirePartImages ? "true" : "false"}" data-require-diagrams="${book.requireDiagrams ? "true" : "false"}">${body.join("\n")}</article>
   </main>
   <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: clientChapters, sourceManifest: parsed.sourceManifest, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages, requireDiagrams: book.requireDiagrams })}</script>
-  <script>${clientScript()}</script>
+  <script>${serializeBookClientProgram()}</script>
 </body>
 </html>`;
 }
 
-function clientScript() {
-  return `
-const bookData = JSON.parse(document.getElementById("book-data").textContent);
-
-function blockNode(block) {
-  const template = document.createElement("template");
-  template.innerHTML = block.html;
-  let node;
-  const significantText = [...template.content.childNodes]
-    .filter((child) => child.nodeType === Node.TEXT_NODE)
-    .some((child) => child.textContent.trim());
-  if (template.content.children.length === 1 && !significantText) {
-    node = template.content.firstElementChild;
-  } else {
-    node = document.createElement("div");
-    node.appendChild(template.content);
-  }
-  node.dataset.sourceBlockId = block.sourceBlockId;
-  if (block.plan) {
-    node.dataset.semanticRole = block.plan.role;
-    node.dataset.plannedTreatment = block.plan.treatment;
-    node.classList.add("planned-" + block.plan.treatment);
-    if (block.plan.treatment === "callout") node.classList.add("callout");
-    if (block.plan.diagramConcepts?.length) node.dataset.diagramConcept = block.plan.diagramConcepts.join(" | ");
-    if (block.plan.treatment === "diagram") {
-      const figure = document.createElement("figure");
-      figure.className = "diagram-card planned-diagram";
-      figure.dataset.sourceBlockId = block.sourceBlockId;
-      figure.dataset.semanticRole = block.plan.role;
-      figure.dataset.plannedTreatment = "diagram";
-      const caption = document.createElement("figcaption");
-      caption.className = "model-label";
-      caption.textContent = block.plan.diagramConcepts?.[0] || ("Structured " + block.plan.role);
-      const content = document.createElement("div");
-      content.className = "diagram-flow";
-      const sourceText = (node.textContent || "").replace(/\\s+/g, " ").trim();
-      let segments = sourceText.match(/[^.!?]+[.!?]?/g)?.map((value) => value.trim()).filter(Boolean) || [];
-      if (segments.length < 2) {
-        const words = sourceText.split(/\\s+/).filter(Boolean);
-        const midpoint = Math.max(1, Math.ceil(words.length / 2));
-        segments = [words.slice(0, midpoint).join(" "), words.slice(midpoint).join(" ")].filter(Boolean);
-      }
-      if (segments.length < 2) segments.push(block.plan.diagramConcepts?.[0] || block.plan.role);
-      segments.forEach((segment, index) => {
-        const diagramNode = document.createElement("div");
-        diagramNode.className = "diagram-node";
-        diagramNode.textContent = segment;
-        content.appendChild(diagramNode);
-        if (index < segments.length - 1) {
-          const connector = document.createElement("span");
-          connector.className = "diagram-connector";
-          connector.setAttribute("aria-hidden", "true");
-          connector.textContent = "→";
-          content.appendChild(connector);
-        }
-      });
-      figure.append(caption, content);
-      return figure;
-    }
-  }
-  return node;
-}
-
-function appendText(parent, tagName, className, text) {
-  const node = document.createElement(tagName);
-  if (className) node.className = className;
-  node.textContent = text;
-  parent.appendChild(node);
-  return node;
-}
-
-function paginationUnits(nodes) {
-  const units = [];
-  for (let index = 0; index < nodes.length; index += 1) {
-    const block = nodes[index];
-    if (block.matches("h3, h4") && nodes[index + 1]) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "keep-with-next";
-      wrapper.appendChild(block);
-      wrapper.appendChild(nodes[index + 1]);
-      units.push(wrapper);
-      index += 1;
-    } else {
-      units.push(block);
-    }
-  }
-  return units;
-}
-
-function overflows(frame) {
-  return frame.scrollHeight > frame.clientHeight + 1 || frame.scrollWidth > frame.clientWidth + 1;
-}
-
-const SHORT_SINGLE_CHAR_LIMIT = ${SHORT_SINGLE_CHAR_LIMIT};
-
-function frameText(frame) {
-  return (frame?.textContent || "").replace(/\\s+/g, " ").trim();
-}
-
-function frameWordCount(frame) {
-  const text = frameText(frame);
-  return text ? text.split(/\\s+/).length : 0;
-}
-
-function hasRichFrameContent(frame) {
-  return Boolean(frame?.querySelector("figure, table, .diagram-card, .comparison-diagram, .callout, .span-all"));
-}
-
-function applyShortSingleMeasure(page, frame) {
-  const chars = frameText(frame).length;
-  if (!page || !frame || chars === 0 || chars > SHORT_SINGLE_CHAR_LIMIT || hasRichFrameContent(frame)) return false;
-  page.classList.add("text-short-single");
-  if (overflows(frame)) {
-    page.classList.remove("text-short-single");
-    return false;
-  }
-  return true;
-}
-
-function intersects(a, b) {
-  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-}
-
-function tailFurnitureOverlaps(page) {
-  const frame = page?.querySelector(".text-frame");
-  const tail = page?.querySelector(".tail-furniture");
-  if (!frame || !tail) return false;
-  const tailRect = tail.getBoundingClientRect();
-  return [...frame.children].some((node) => {
-    const rect = node.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && intersects(rect, tailRect);
-  });
-}
-
-function removeTailFurniture(page) {
-  page.querySelector(".tail-furniture")?.remove();
-  page.classList.remove("has-tail-furniture");
-}
-
-function addTailFurniture(chapter, page, frame) {
-  if (!chapter.tailText) return false;
-  page.classList.add("has-tail-furniture");
-  const aside = document.createElement("aside");
-  aside.className = "tail-furniture";
-  aside.setAttribute("aria-hidden", "true");
-  const wrapper = document.createElement("div");
-  const label = document.createElement("p");
-  label.className = "tail-label no-indent";
-  label.textContent = "Chapter close";
-  const quote = document.createElement("p");
-  quote.className = "tail-quote no-indent";
-  quote.textContent = chapter.tailText;
-  wrapper.appendChild(label);
-  wrapper.appendChild(quote);
-  aside.appendChild(wrapper);
-  page.querySelector(".page-inner").appendChild(aside);
-  if (overflows(frame) || tailFurnitureOverlaps(page)) {
-    removeTailFurniture(page);
-    return false;
-  }
-  return true;
-}
-
-function paginateChapter(chapter, mount) {
-  const units = paginationUnits(chapter.blocks.map(blockNode));
-  let page;
-  let frame;
-  let count = 0;
-  const pages = [];
-  function newPage() {
-    count += 1;
-    page = document.createElement("section");
-    page.className = "page text-page " + (bookData.bodyColumns || "text-two");
-    if (count === 1) {
-      page.id = chapter.id;
-      page.dataset.firstTextPageFor = chapter.id;
-    }
-    page.setAttribute("aria-label", chapter.title + (count > 1 ? " continued" : ""));
-    const partLabel = chapter.part ? chapter.part.label : "Opening";
-    const inner = document.createElement("div");
-    inner.className = "page-inner";
-    const header = document.createElement("header");
-    header.className = "text-page-header";
-    const kicker = appendText(header, "p", "chapter-kicker no-indent", chapter.number === "Introduction" ? "Introduction" : "Chapter " + chapter.number);
-    kicker.append(" ");
-    appendText(kicker, "span", "", partLabel);
-    appendText(header, "h1", "text-page-title", chapter.title);
-    frame = document.createElement("div");
-    frame.className = "text-frame";
-    inner.appendChild(header);
-    inner.appendChild(frame);
-    page.appendChild(inner);
-    mount.appendChild(page);
-    pages.push(page);
-  }
-
-  newPage();
-  for (const unit of units) {
-    frame.appendChild(unit);
-    if (overflows(frame)) {
-      frame.removeChild(unit);
-      newPage();
-      frame.appendChild(unit);
-      if (overflows(frame)) throw new Error("A manuscript block is too large for a text page in " + chapter.title);
-    }
-  }
-
-  const lastPage = pages[pages.length - 1];
-  const lastFrame = lastPage?.querySelector(".text-frame");
-  if (lastPage && lastFrame) {
-    applyShortSingleMeasure(lastPage, lastFrame);
-    if (frameWordCount(lastFrame) < 640 && !overflows(lastFrame)) {
-      addTailFurniture(chapter, lastPage, lastFrame);
-    }
-  }
-}
-
-function addPageNumbers() {
-  document.querySelectorAll(".page-number").forEach((node) => node.remove());
-  const pages = [...document.querySelectorAll(".page")];
-  pages.forEach((page, index) => {
-    if (page.classList.contains("cover")) return;
-    const number = document.createElement("div");
-    number.className = "page-number";
-    number.textContent = String(index + 1);
-    page.querySelector(".page-inner")?.appendChild(number);
-  });
-  document.querySelectorAll("[data-toc-page-for]").forEach((node) => {
-    const target = document.getElementById(node.dataset.tocPageFor);
-    const pageNumber = pages.indexOf(target) + 1;
-    node.textContent = pageNumber > 0 ? String(pageNumber) : "";
-  });
-}
-
-function checkOverflow() {
-  const offenders = [...document.querySelectorAll(".text-frame")].filter(overflows);
-  if (offenders.length) {
-    document.documentElement.dataset.overflow = String(offenders.length);
-    throw new Error(offenders.length + " text frames overflow");
-  }
-  const tailOffenders = [...document.querySelectorAll(".text-page")].filter(tailFurnitureOverlaps);
-  if (tailOffenders.length) {
-    document.documentElement.dataset.tailOverlap = String(tailOffenders.length);
-    throw new Error(tailOffenders.length + " tail furniture block(s) overlap text");
-  }
-}
-
-try {
-  for (const chapter of bookData.chapters) {
-    const mount = document.querySelector('[data-chapter-id="' + chapter.id + '"]');
-    if (mount) paginateChapter(chapter, mount);
-  }
-  addPageNumbers();
-  checkOverflow();
-  window.__BOOK_READY = true;
-} catch (error) {
-  window.__BOOK_READY = false;
-  window.__BOOK_ERROR = error.message;
-  console.error(error);
-}`;
-}
 
 const manifestFiles = [manifestEntry, manifestCoverOptions];
 const coverAsset = localAssetManifestPath(book.coverImage, "coverImage");

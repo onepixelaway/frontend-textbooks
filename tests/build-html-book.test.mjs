@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import { promisify } from "node:util";
+import { serializeBookClientProgram } from "../scripts/lib/book-client-program.mjs";
 
 const execFileAsync = promisify(execFile);
 const builder = new URL("../scripts/build-html-book.mjs", import.meta.url);
@@ -66,6 +67,20 @@ test("build embeds source coverage and duplicate-safe chapter mounts", async () 
   assert.match(html, /data-chapter-id="duplicate" data-source-block-id="[^"]+"/);
   assert.match(html, /data-chapter-id="duplicate-2" data-source-block-id="[^"]+"/);
   assert.match(html, /node\.dataset\.sourceBlockId = block\.sourceBlockId/);
+
+  const embeddedClient = html.match(/<script>([\s\S]+)<\/script>/)?.[1];
+  assert.equal(embeddedClient, serializeBookClientProgram());
+  assert.doesNotMatch(html, /<script\s+src=/);
+
+  const browserWindow = {};
+  const browserDocument = {
+    documentElement: { dataset: {} },
+    getElementById: () => ({ textContent: bookDataText }),
+    querySelector: () => null,
+    querySelectorAll: () => []
+  };
+  Function("document", "window", "Node", embeddedClient)(browserDocument, browserWindow, { TEXT_NODE: 3 });
+  assert.equal(browserWindow.__BOOK_READY, true);
 });
 
 test("H1 metadata stays in the denominator and maps only to an actually matching title", async () => {
@@ -201,4 +216,80 @@ test("builder rejects protocol-relative remote assets", async () => {
     execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
     /protocol-relative|https/i
   );
+});
+
+test("theme overrides merge known validated colors into the selected preset", async () => {
+  const paths = await fixture({
+    partImages: {},
+    requirePartImages: false,
+    style: "default",
+    themeOverrides: {
+      heading: "#003F88",
+      deck: "#006B3C",
+      accent: "#009C3B",
+      soft: "#F2C500",
+      coverBand: "#003F88"
+    }
+  });
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+
+  assert.match(html, /--heading-ink: #003F88;/);
+  assert.match(html, /--deck-ink: #006B3C;/);
+  assert.match(html, /--accent: #009C3B;/);
+  assert.match(html, /--soft-accent: #F2C500;/);
+  assert.match(html, /--cover-band: #003F88;/);
+});
+
+test("theme overrides reject unknown keys and unsafe CSS values", async (t) => {
+  await t.test("unknown key", async () => {
+    const paths = await fixture({ themeOverrides: { surprise: "#123456" } });
+    await assert.rejects(
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+      /themeOverrides|additional propert|surprise/i
+    );
+  });
+
+  await t.test("unsafe value", async () => {
+    const paths = await fixture({ themeOverrides: { accent: "red; } body { display: none" } });
+    await assert.rejects(
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+      /themeOverrides|pattern|accent/i
+    );
+  });
+});
+
+test("selected cover route drives the final cover through the shared five-route renderer", async () => {
+  const paths = await fixture({
+    partImages: {},
+    requirePartImages: false,
+    selectedCoverRoute: "symbol"
+  });
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+  const options = await readFile(join(paths.outputDir, "cover-options.html"), "utf8");
+
+  assert.match(html, /class="page option-cover cover route-symbol"[^>]*data-cover-route="symbol"/);
+  assert.doesNotMatch(html, /class="page cover"/);
+  assert.equal((options.match(/data-cover-route=/g) || []).length, 5);
+  for (const route of ["type", "symbol", "photo", "minimal", "press"]) {
+    assert.match(options, new RegExp(`data-cover-route="${route}"`));
+  }
+});
+
+test("bullet-only chapters produce a useful opener summary", async () => {
+  const paths = await fixture({
+    partImages: {},
+    requirePartImages: false,
+    chapterOpeners: true
+  }, `# Proof Book
+
+## Checklist chapter
+
+- First concrete action
+- Second concrete action`);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+
+  assert.match(html, /class="chapter-summary no-indent">First concrete action Second concrete action<\/p>/);
 });

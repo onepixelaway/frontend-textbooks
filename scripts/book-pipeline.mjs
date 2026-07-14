@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertContract } from "./lib/json-contracts.mjs";
@@ -19,7 +20,9 @@ import { runNodeScript } from "./lib/process-runner.mjs";
 const PIPELINE_VERSION = "1.0.0";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const builder = join(scriptDir, "build-html-book.mjs");
-const browser = join(scriptDir, "book-browser.mjs");
+const browserRunner = join(scriptDir, "run-book-browser.sh");
+const pdfStructure = join(scriptDir, "lib/pdf-structure.mjs");
+const pdfInspection = join(scriptDir, "pdf-inspection.mjs");
 const fileHashCache = new Map();
 let workspaceLockToken = null;
 
@@ -120,13 +123,11 @@ function validateInputs(args) {
   };
   const assetHashes = localAssetPaths(config, parsed, outputDir).map((path) => [relativePath(outputDir, path), hashFile(path)]).sort(([a], [b]) => a.localeCompare(b));
   const toolPaths = [
-    ...readdirSync(scriptDir).filter((name) => name.endsWith(".mjs")).map((name) => join(scriptDir, name)),
+    ...readdirSync(scriptDir).filter((name) => name.endsWith(".mjs") || name.endsWith(".sh")).map((name) => join(scriptDir, name)),
     ...readdirSync(join(scriptDir, "lib")).filter((name) => name.endsWith(".mjs")).map((name) => join(scriptDir, "lib", name)),
     join(scriptDir, "../page-base.css"),
     join(scriptDir, "../package.json"),
-    join(scriptDir, "../package-lock.json"),
-    join(scriptDir, "../node_modules/playwright/package.json"),
-    join(scriptDir, "../node_modules/playwright-core/browsers.json")
+    join(scriptDir, "../package-lock.json")
   ].sort();
   const toolHashes = toolPaths.map((path) => [relativePath(resolve(scriptDir, ".."), path), hashFile(path)]);
   const toolchain = { node: process.version };
@@ -182,7 +183,7 @@ function artifactPaths(context, tier, verification = null, aesthetic = { status:
     join(context.outputDir, "book-build-summary.json"),
     join(context.outputDir, "book-plan-receipt.json"),
     ...buildFiles,
-    ...(tier === "full" ? [context.pdfPath] : []),
+    ...(tier === "full" ? [context.pdfPath, ...pdfInspectionPaths(context, { requireAll })] : []),
     ...(tier !== "fast" ? [
       reportPath,
       join(context.verificationDir, "diagnostics.json"),
@@ -233,6 +234,103 @@ function runNode(args, stage, timeoutMs) {
     timeoutMs,
     env: { ...process.env, ...(workspaceLockToken ? { BOOK_PIPELINE_LOCK_TOKEN: workspaceLockToken } : {}) }
   });
+}
+
+function runBrowser(args, stage, timeoutMs) {
+  const configured = process.env.BOOK_PIPELINE_TIMEOUT_MS;
+  const timeout = configured === undefined ? timeoutMs : Number(configured);
+  if (!Number.isInteger(timeout) || timeout < 1_000) {
+    throw new Error("BOOK_PIPELINE_TIMEOUT_MS must be an integer of at least 1000");
+  }
+  try {
+    return execFileSync("bash", [browserRunner, ...args], {
+      cwd: resolve(scriptDir, ".."),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 16 * 1024 * 1024,
+      timeout,
+      killSignal: "SIGTERM",
+      env: { ...process.env, ...(workspaceLockToken ? { BOOK_PIPELINE_LOCK_TOKEN: workspaceLockToken } : {}) }
+    });
+  } catch (error) {
+    if (error.code === "ETIMEDOUT" || error.signal === "SIGTERM") {
+      throw new Error(`${stage} timed out after ${timeout}ms`);
+    }
+    const detail = String(error.stderr || error.stdout || "").trim();
+    if (detail) throw new Error(`${stage} failed: ${detail.slice(0, 2_000)}`);
+    throw error;
+  }
+}
+
+function pdfInspectionPaths(context, { requireAll = true } = {}) {
+  const directory = join(context.verificationDir, "pdf-pages");
+  const structurePath = join(directory, "pdf-structure.json");
+  const inspectionPath = join(directory, "pdf-inspection.json");
+  const paths = [structurePath, inspectionPath];
+
+  if (existsSync(structurePath)) {
+    const structure = JSON.parse(readFileSync(structurePath, "utf8"));
+    if (!Number.isInteger(structure.pageCount) || structure.pageCount < 1) {
+      throw new Error(`PDF structure report has an invalid page count: ${relativePath(context.outputDir, structurePath)}`);
+    }
+    for (let page = 1; page <= structure.pageCount; page += 1) {
+      paths.push(join(directory, `pdf-page-${page}.png`));
+    }
+  }
+
+  if (existsSync(inspectionPath)) {
+    const inspection = JSON.parse(readFileSync(inspectionPath, "utf8"));
+    const reported = [
+      ...(inspection.contactSheets ?? []),
+      ...(inspection.selections ?? []).map((selection) => selection.path)
+    ];
+    for (const value of reported) {
+      if (typeof value !== "string") throw new Error("PDF inspection report contains an invalid artifact path");
+      const path = resolve(value);
+      if (!isWithin(context.outputDir, path)) throw new Error(`PDF inspection artifact must remain inside outputDir: ${value}`);
+      paths.push(path);
+    }
+  }
+
+  const unique = [...new Set(paths)];
+  if (requireAll) {
+    const missing = unique.filter((path) => !existsSync(path));
+    if (missing.length) {
+      throw new Error(`Required full-tier PDF inspection artifact(s) are missing: ${missing.map((path) => relativePath(context.outputDir, path)).join(", ")}`);
+    }
+  }
+  return unique;
+}
+
+function runPdfInspection(context) {
+  const directory = join(context.verificationDir, "pdf-pages");
+  const structurePath = join(directory, "pdf-structure.json");
+  const inspectionPath = join(directory, "pdf-inspection.json");
+  const renderReportPath = join(context.verificationDir, "render-report.json");
+  rmSync(directory, { recursive: true, force: true });
+  mkdirSync(directory, { recursive: true });
+  runNode([
+    pdfStructure,
+    context.pdfPath,
+    "--html", context.outputHtml,
+    "--require-text",
+    "--render", join(directory, "pdf-page"),
+    "--report", structurePath
+  ], "PDF structure inspection", 180_000);
+  runBrowser([
+    "contact-sheet",
+    "--input-dir", directory,
+    "--output", join(directory, "contact-sheet.png")
+  ], "PDF contact sheet generation", 300_000);
+  runNode([
+    pdfInspection,
+    "--pdf", context.pdfPath,
+    "--pages-dir", directory,
+    "--structure", structurePath,
+    "--render-report", renderReportPath
+  ], "PDF semantic inspection", 180_000);
+  pdfInspectionPaths(context);
+  return inspectionPath;
 }
 
 function outputRecord(outputDir, path) {
@@ -304,7 +402,7 @@ function validateAestheticReview(context) {
 
 function writeArtifactManifest(context, tier, verification, aesthetic) {
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     pipelineVersion: PIPELINE_VERSION,
     inputHash: context.inputHash,
     inputs: context.inputs,
@@ -314,6 +412,7 @@ function writeArtifactManifest(context, tier, verification, aesthetic) {
       passed: true,
       pages: verification?.print?.pages ?? verification?.desktop?.pages ?? 0,
       sourceCoverage: verification?.print?.sourcePreservation?.ratio ?? verification?.desktop?.sourcePreservation?.ratio ?? 1,
+      sourceBlockCoverage: verification?.print?.sourcePreservation?.blockRatio ?? verification?.desktop?.sourcePreservation?.blockRatio ?? 1,
       contactSheet: tier === "fast" ? "" : relativePath(context.outputDir, join(context.verificationDir, "contact-sheet.png"))
     },
     reasoning: {
@@ -359,13 +458,20 @@ async function main() {
     const aesthetic = desiredTier === "full" ? validateAestheticReview(context) : { status: "not-required", review: null };
     if (aesthetic.status === "requested") {
       writeIterationContext(context, previous, desiredTier, "review-required", true);
-      console.log(JSON.stringify(summary(context, "review-required", desiredTier, { contactSheet: join(context.verificationDir, "contact-sheet.png") })));
+      console.log(JSON.stringify(summary(context, "review-required", desiredTier, {
+        contactSheet: join(context.verificationDir, "contact-sheet.png"),
+        pdfInspection: relativePath(context.outputDir, join(context.verificationDir, "pdf-pages", "pdf-inspection.json"))
+      })));
       process.exitCode = 3;
       return;
     }
     writeArtifactManifest(context, desiredTier, verification, aesthetic);
     writeIterationContext(context, previous, desiredTier, "pass", true);
-    console.log(JSON.stringify(summary(context, "pass", desiredTier, { skipped: true, manifest: join(context.outputDir, "artifact-manifest.json") })));
+    console.log(JSON.stringify(summary(context, "pass", desiredTier, {
+      skipped: true,
+      ...(desiredTier === "full" ? { pdfInspection: relativePath(context.outputDir, join(context.verificationDir, "pdf-pages", "pdf-inspection.json")) } : {}),
+      manifest: join(context.outputDir, "artifact-manifest.json")
+    })));
     return;
   }
 
@@ -374,21 +480,26 @@ async function main() {
   let verification = null;
   if (desiredTier === "affected") {
     const sourceIds = changedSourceBlockIds(previous, context.parsed);
-    const browserArgs = [browser, "verify", "--html", context.outputHtml, "--output-dir", context.verificationDir, "--profile", "affected", "--format", "summary"];
+    const browserArgs = ["verify", "--html", context.outputHtml, "--output-dir", context.verificationDir, "--profile", "affected", "--format", "summary"];
     if (sourceIds.length) browserArgs.push("--source-ids", sourceIds.join(","));
-    runNode(browserArgs, "affected browser verification", 300_000);
+    runBrowser(browserArgs, "affected browser verification", 300_000);
     fileHashCache.clear();
     verification = JSON.parse(readFileSync(join(context.verificationDir, "render-report.json"), "utf8"));
   } else if (desiredTier === "full") {
-    runNode([browser, "finalize", "--html", context.outputHtml, "--pdf", context.pdfPath, "--output-dir", context.verificationDir, "--format", "summary"], "full browser finalization", 600_000);
+    runBrowser(["finalize", "--html", context.outputHtml, "--pdf", context.pdfPath, "--output-dir", context.verificationDir, "--format", "summary"], "full browser finalization", 600_000);
     fileHashCache.clear();
     verification = JSON.parse(readFileSync(join(context.verificationDir, "render-report.json"), "utf8"));
+    runPdfInspection(context);
+    fileHashCache.clear();
   }
   const aesthetic = desiredTier === "full" ? validateAestheticReview(context) : { status: "not-required", review: null };
   if (aesthetic.status === "requested") {
     atomicJson(join(context.outputDir, "book-state.json"), stateFor(context, desiredTier, verification, aesthetic));
     writeIterationContext(context, previous, desiredTier, "review-required", false);
-    console.log(JSON.stringify(summary(context, "review-required", desiredTier, { contactSheet: join(context.verificationDir, "contact-sheet.png") })));
+    console.log(JSON.stringify(summary(context, "review-required", desiredTier, {
+      contactSheet: join(context.verificationDir, "contact-sheet.png"),
+      pdfInspection: relativePath(context.outputDir, join(context.verificationDir, "pdf-pages", "pdf-inspection.json"))
+    })));
     process.exitCode = 3;
     return;
   }
@@ -397,7 +508,10 @@ async function main() {
   writeIterationContext(context, previous, desiredTier, "pass", false);
   console.log(JSON.stringify(summary(context, "pass", desiredTier, {
     skipped: false,
-    ...(desiredTier === "full" ? { pdf: context.pdfPath } : {}),
+    ...(desiredTier === "full" ? {
+      pdf: context.pdfPath,
+      pdfInspection: relativePath(context.outputDir, join(context.verificationDir, "pdf-pages", "pdf-inspection.json"))
+    } : {}),
     manifest: join(context.outputDir, "artifact-manifest.json")
   })));
   } finally {

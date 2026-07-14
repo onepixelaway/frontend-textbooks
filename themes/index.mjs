@@ -81,13 +81,20 @@ for (const theme of localThemes) {
 }
 
 export const STYLE_NAMES = Object.keys(THEMES);
+export const THEME_COLOR_KEYS = Object.freeze([
+  "browser", "page", "ink", "heading", "deck", "muted", "meta",
+  "accent", "soft", "rule", "steel", "coverBand", "callout"
+]);
 
 export function getTheme(name = DEFAULT_THEME_NAME) {
   return THEMES[name] ?? DEFAULT_THEME;
 }
 
-export function themeColors(theme) {
-  return theme.colors ?? theme;
+export function themeColors(theme, overrides = {}) {
+  const base = theme.colors ?? theme;
+  return Object.fromEntries(THEME_COLOR_KEYS
+    .filter((key) => base[key] !== undefined || overrides[key] !== undefined)
+    .map((key) => [key, overrides[key] ?? base[key]]));
 }
 
 export function themeFontStack(theme, name) {

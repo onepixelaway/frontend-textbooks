@@ -21,6 +21,38 @@ More copy.`);
   assert.deepEqual(parsed.chapters[0].blocks.map((block) => block.type), ["h3", "p", "h4", "p"]);
 });
 
+test("an explicit H3 chapter directive creates a chapter without exposing the directive", () => {
+  const parsed = parseManuscript(`# Metadata
+
+## Part I: Foundations
+
+### First lesson {chapter}
+
+Lesson prose.
+
+#### Interior section
+
+More prose.`);
+
+  assert.deepEqual(parsed.chapters.map((chapter) => chapter.title), ["First lesson"]);
+  assert.equal(parsed.chapters[0].part.id, "part-i-foundations");
+  assert.deepEqual(parsed.chapters[0].blocks.map((block) => block.type), ["p", "h4", "p"]);
+  assert.doesNotMatch(JSON.stringify(parsed.sourceManifest), /\{chapter\}/u);
+});
+
+test("empty H2 chapter containers fail with an actionable error", () => {
+  assert.throws(
+    () => parseManuscript(`# Metadata
+
+## Empty chapter
+
+## Real chapter
+
+Real prose.`),
+    /empty chapter.*Empty chapter/i
+  );
+});
+
 test("rich Markdown renders through markdown-it while source HTML stays escaped", () => {
   const parsed = parseManuscript(`# Metadata
 

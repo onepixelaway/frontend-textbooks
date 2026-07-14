@@ -62,7 +62,7 @@ run_export_wrapper() {
   fi
   output_pdf=$(absolute_output_path "$output_pdf")
 
-  "$BOOK_BROWSER_SCRIPT_DIR/run-book-browser.sh" export --html "$input_html" --pdf "$output_pdf" --wait "$wait_mode"
+  bash "$BOOK_BROWSER_SCRIPT_DIR/run-book-browser.sh" export --html "$input_html" --pdf "$output_pdf" --wait "$wait_mode"
 
   echo ""
   echo "$success_message: $output_pdf"
@@ -86,5 +86,5 @@ run_verify_wrapper() {
   mkdir -p "$output_dir"
   output_dir=$(cd "$output_dir" && pwd)
 
-  "$BOOK_BROWSER_SCRIPT_DIR/run-book-browser.sh" verify --html "$input_html" --output-dir "$output_dir" --wait "$wait_mode"
+  bash "$BOOK_BROWSER_SCRIPT_DIR/run-book-browser.sh" verify --html "$input_html" --output-dir "$output_dir" --wait "$wait_mode"
 }

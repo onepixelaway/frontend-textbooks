@@ -38,6 +38,8 @@ The model owns judgment: audience and genre, semantic classifications, theme/lay
 
 Create `book.json` and retain the source manuscript as Markdown. Author and title are required. Use the default `colbalt` theme unless the user names a registered theme or gives a clear visual direction.
 
+Treat H1 as book metadata, H2 as chapters, and H3/H4 as interior sections. Use `### Chapter title {chapter}` only when an H3 must explicitly start a chapter; empty chapters are invalid. Use `themeOverrides` for validated palette adaptations and `selectedCoverRoute` to make the chosen cover route authoritative.
+
 Generate the stable source inventory:
 
 ```bash
@@ -91,7 +93,7 @@ node "$SKILL_DIR/scripts/book-pipeline.mjs" finalize \
 
 ### 6. Deliver
 
-Deliver the HTML, PDF, approximate page count, preservation percentage, and any material caveats. A complete run must have `artifact-manifest.json` with passing full verification and, when required, a passing aesthetic review.
+Deliver the HTML, PDF, approximate page count, word and exact-block preservation percentages, and any material caveats. A complete run must have `artifact-manifest.json` with passing full verification and, when required, a passing aesthetic review.
 
 ## Design Decisions
 
@@ -108,6 +110,7 @@ Read only the reference needed for the current decision:
 - [references/visual-system.md](references/visual-system.md): diagram grammar, signature tools, imagery, page rhythm, cover quality.
 - [references/layout-and-html.md](references/layout-and-html.md): HTML architecture, measured pagination, atomic print CSS, mobile behavior.
 - [references/verification-gates.md](references/verification-gates.md): diagnostics, preservation, visual/PDF gates, delivery requirements.
+- [references/pdf-optimization.md](references/pdf-optimization.md): guarded direct export, installed-Chrome recovery, and standalone PDF inspection.
 - [references/reasoning-contracts.md](references/reasoning-contracts.md): strict plan, repair, exception, and aesthetic JSON contracts.
 - [references/iteration.md](references/iteration.md): incremental tiers, delta context, cache invalidation, and compact reporting.
 

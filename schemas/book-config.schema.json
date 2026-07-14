@@ -19,6 +19,26 @@
     "chapterClosers": { "type": "object", "additionalProperties": { "type": "string" } },
     "partImages": { "type": "object", "additionalProperties": { "type": "string" } },
     "style": { "type": "string", "minLength": 1 },
+    "themeOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "page": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "ink": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "heading": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "deck": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "muted": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "meta": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "accent": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "soft": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "rule": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "steel": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "coverBand": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" },
+        "callout": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" }
+      }
+    },
+    "selectedCoverRoute": { "type": "string", "enum": ["type", "symbol", "photo", "minimal", "press"] },
     "bookType": { "type": "string", "enum": ["textbook", "manual", "field-guide", "business", "editorial", "coffee-table", "workbook", "literary", "plain-reader"] },
     "coverKicker": { "type": "string" },
     "bodyColumns": { "type": "string", "enum": ["text-two", "text-single", "text-three"] },

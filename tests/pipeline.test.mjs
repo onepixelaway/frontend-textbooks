@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -42,8 +42,11 @@ async function fixture({ aestheticRequired = false } = {}) {
   return { root, outputDir, configPath, manuscriptPath, planPath };
 }
 
-async function run(paths, mode = "build", extra = []) {
-  return execFileAsync(process.execPath, [pipeline, mode, "--config", paths.configPath, "--manuscript", paths.manuscriptPath, "--plan", paths.planPath, ...extra], { timeout: 30_000 });
+async function run(paths, mode = "build", extra = [], { env = {} } = {}) {
+  return execFileAsync(process.execPath, [pipeline, mode, "--config", paths.configPath, "--manuscript", paths.manuscriptPath, "--plan", paths.planPath, ...extra], {
+    timeout: 30_000,
+    env: { ...process.env, ...env }
+  });
 }
 
 test("one orchestration command emits deterministic fast-tier artifacts", async () => {
@@ -115,8 +118,19 @@ test("pipeline enforces the mode-to-tier contract", async () => {
 
 test("affected pipeline verifies rendered screen views without exporting a PDF", async () => {
   const paths = await fixture();
-  const first = JSON.parse((await run(paths, "verify", ["--tier", "affected"])).stdout);
+  const fakeBin = join(paths.root, "bin");
+  const resolverLog = join(paths.root, "browser-resolver.log");
+  const bashWrapper = join(fakeBin, "bash");
+  await mkdir(fakeBin);
+  await writeFile(bashWrapper, "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$BOOK_BROWSER_RESOLVER_LOG\"\nexec /bin/bash \"$@\"\n");
+  await chmod(bashWrapper, 0o755);
+  const resolverEnv = {
+    BOOK_BROWSER_RESOLVER_LOG: resolverLog,
+    PATH: `${fakeBin}:${process.env.PATH}`
+  };
+  const first = JSON.parse((await run(paths, "verify", ["--tier", "affected"], { env: resolverEnv })).stdout);
   assert.equal(first.status, "pass");
+  assert.match(await readFile(resolverLog, "utf8"), /run-book-browser\.sh verify --html/u);
   const manifest = JSON.parse(await readFile(join(paths.outputDir, "artifact-manifest.json")));
   assert.equal(manifest.verification.tier, "affected");
   const report = JSON.parse(await readFile(join(paths.outputDir, ".verification", "render-report.json")));
@@ -248,7 +262,23 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
   assert.equal(first.code, 3, `${first.stdout}\n${first.stderr}`);
   const firstSummary = JSON.parse(first.stdout);
   assert.equal(firstSummary.status, "review-required");
+  assert.equal(firstSummary.pdfInspection, ".verification/pdf-pages/pdf-inspection.json");
   assert.ok(first.stdout.length < 512);
+  const pdfPagesDir = join(paths.outputDir, ".verification", "pdf-pages");
+  const structure = JSON.parse(await readFile(join(pdfPagesDir, "pdf-structure.json")));
+  const inspection = JSON.parse(await readFile(join(pdfPagesDir, "pdf-inspection.json")));
+  assert.ok(structure.pageCount > 0);
+  assert.equal(inspection.pages, structure.pageCount);
+  assert.equal(inspection.textPreservation.blockRatio, 1);
+  assert.ok(inspection.contactSheets.length > 0);
+  assert.ok(inspection.selections.length > 0);
+  for (let page = 1; page <= structure.pageCount; page += 1) {
+    await readFile(join(pdfPagesDir, `pdf-page-${page}.png`));
+  }
+  await Promise.all([
+    ...inspection.contactSheets,
+    ...inspection.selections.map((selection) => selection.path)
+  ].map((path) => readFile(path)));
   const reviewPath = join(paths.root, "aesthetic-review.json");
   const request = JSON.parse(await readFile(join(paths.outputDir, ".verification", "aesthetic-review-request.json")));
   await writeFile(reviewPath, JSON.stringify({
@@ -288,6 +318,15 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
   assert.equal(manifest.reasoning.aestheticReview, "pass");
   assert.ok(manifest.outputs.some((item) => item.path.endsWith(".pdf")));
   assert.ok(manifest.outputs.some((item) => item.path === ".verification/contact-sheet.png"));
+  const manifested = new Set(manifest.outputs.map((item) => item.path));
+  assert.ok(manifested.has(".verification/pdf-pages/pdf-structure.json"));
+  assert.ok(manifested.has(".verification/pdf-pages/pdf-inspection.json"));
+  for (let page = 1; page <= structure.pageCount; page += 1) {
+    assert.ok(manifested.has(`.verification/pdf-pages/pdf-page-${page}.png`));
+  }
+  for (const path of [...inspection.contactSheets, ...inspection.selections.map((selection) => selection.path)]) {
+    assert.ok(manifested.has(path.slice(paths.outputDir.length + 1)));
+  }
 
   const changedPlan = JSON.parse(await readFile(paths.planPath));
   changedPlan.aestheticReview.criteria.push("stronger contrast");

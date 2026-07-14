@@ -376,7 +376,7 @@ figure {
 
 .text-stack-row {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--text-stack-column-gap, 0.52in);
     padding-top: 0.2in;
     border-top: 1px solid var(--rule, #9BB2EA);
