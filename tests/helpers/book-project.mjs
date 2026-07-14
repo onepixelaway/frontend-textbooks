@@ -30,6 +30,7 @@ export async function writeBookProject(root, {
     bodyColumns: "text-single",
     chapterOpeners: false,
     requireDiagrams: false,
+    requireFeaturePages: false,
     requirePartImages: false,
     ...configOverrides
   };

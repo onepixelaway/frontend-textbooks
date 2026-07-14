@@ -38,12 +38,34 @@ test("theme prompt prose has one executable source of truth", async () => {
   assert.equal(files.filter((file) => file.includes(signature)).length, 1);
 });
 
+test("workflow pauses for a topic-aware user color-scheme choice", async () => {
+  const [skill, intake, reasoning, metadata, readme] = await Promise.all([
+    readFile(new URL("SKILL.md", root), "utf8"),
+    readFile(new URL("references/intake-and-planning.md", root), "utf8"),
+    readFile(new URL("references/reasoning-contracts.md", root), "utf8"),
+    readFile(new URL("agents/openai.yaml", root), "utf8"),
+    readFile(new URL("README.md", root), "utf8")
+  ]);
+
+  assert.match(skill, /three numbered color-scheme choices/i);
+  assert.match(skill, /mark one as recommended/i);
+  assert.match(skill, /wait for the user's answer/i);
+  assert.match(skill, /style.*themeOverrides/is);
+  assert.doesNotMatch(skill, /Use the default `colbalt` theme unless/i);
+  assert.match(intake, /subject, tone, audience, and cultural context/i);
+  assert.match(intake, /do not silently choose a default/i);
+  assert.match(reasoning, /user-selected color scheme/i);
+  assert.match(metadata, /color scheme/i);
+  assert.match(readme, /recommend a topic-aware color scheme/i);
+});
+
 test("instructions, metadata, and schemas agree that original cover artwork is mandatory", async () => {
-  const [skill, metadata, configSchema, planSchema] = await Promise.all([
+  const [skill, metadata, configSchema, planSchema, artifactSchema] = await Promise.all([
     readFile(new URL("SKILL.md", root), "utf8"),
     readFile(new URL("agents/openai.yaml", root), "utf8"),
     readFile(new URL("schemas/book-config.schema.json", root), "utf8").then(JSON.parse),
-    readFile(new URL("schemas/book-plan.schema.json", root), "utf8").then(JSON.parse)
+    readFile(new URL("schemas/book-plan.schema.json", root), "utf8").then(JSON.parse),
+    readFile(new URL("schemas/artifact-manifest.schema.json", root), "utf8").then(JSON.parse)
   ]);
   assert.match(skill, /original, manuscript-grounded local bitmap for every cover/i);
   assert.match(skill, /no waiver/i);
@@ -51,10 +73,17 @@ test("instructions, metadata, and schemas agree that original cover artwork is m
   assert.doesNotMatch(skill, /generated images? (?:when|if) (?:useful|available)/i);
   assert.match(metadata, /unique manuscript-grounded cover artwork/i);
   assert.ok(configSchema.required.includes("coverImage"));
-  assert.deepEqual(planSchema.properties.version.enum, [2]);
+  assert.deepEqual(planSchema.properties.version.enum, [3]);
   assert.ok(planSchema.properties.visuals.required.includes("cover"));
+  assert.ok(planSchema.properties.visuals.required.includes("featurePages"));
+  assert.deepEqual(planSchema.properties.visuals.properties.featurePages.items.properties.kind.enum, ["framework", "scorecard", "numbers"]);
   assert.ok(planSchema.properties.visuals.properties.cover.required.includes("generationId"));
   assert.ok(!planSchema.properties.exceptions.items.properties.rule.enum.includes("waive-cover-image"));
+  assert.ok(planSchema.properties.exceptions.items.properties.rule.enum.includes("waive-feature-pages"));
+  assert.deepEqual(configSchema.properties.selectedCoverRoute.enum, ["photo", "minimal"]);
+  assert.deepEqual(planSchema.properties.layout.properties.coverRoute.enum, ["photo", "minimal"]);
+  assert.deepEqual(artifactSchema.properties.cover.properties.route.enum, ["photo", "minimal"]);
+  assert.match(skill, /Photo and Minimal cover routes/);
 });
 
 test("every registered theme exposes one runtime cover prompt contract", async () => {

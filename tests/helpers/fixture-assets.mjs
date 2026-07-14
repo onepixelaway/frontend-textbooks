@@ -84,9 +84,97 @@ export function diagramDecision(sourceBlockIds, overrides = {}) {
   };
 }
 
-export function bookPlan({ manuscriptHash, sourceBlockId, theme = "technical", coverRoute = "photo", bodyColumns = "text-single", chapterOpeners = false, aestheticRequired = false, diagrams = [], images = [], classifications } = {}) {
+export function frameworkFeature(sourceBlockIds, overrides = {}) {
   return {
-    version: 2,
+    id: "reader-framework",
+    kind: "framework",
+    anchorSourceBlockId: sourceBlockIds[0],
+    sourceBlockIds,
+    eyebrow: "Reader's framework",
+    title: "A reusable way to read the argument",
+    deck: "Use these lenses to compare the evidence without flattening the manuscript's distinctions.",
+    items: [
+      { label: "Signal", detail: "Identify the strongest observable evidence." },
+      { label: "Context", detail: "Notice the conditions that change its meaning." },
+      { label: "Weight", detail: "Decide how much the evidence should influence the conclusion." }
+    ],
+    footer: "Changing the weights can change the answer.",
+    rationale: "The source presents a portable framework that deserves a full-page reading tool.",
+    ...overrides
+  };
+}
+
+export function scorecardFeature(sourceBlockIds, overrides = {}) {
+  return {
+    id: "comparison-scorecard",
+    kind: "scorecard",
+    anchorSourceBlockId: sourceBlockIds[0],
+    sourceBlockIds,
+    eyebrow: "Case file · At a glance",
+    title: "Two paths, two definitions of success",
+    deck: "The comparison becomes clearer when the same evidence is scanned side by side.",
+    sides: [
+      {
+        label: "Path A",
+        descriptor: "Peak · efficiency · focus",
+        metrics: [
+          { value: "0.68", label: "Output per attempt" },
+          { value: "47/49", label: "Best observed stretch" }
+        ]
+      },
+      {
+        label: "Path B",
+        descriptor: "Volume · breadth · durability",
+        metrics: [
+          { value: "0.59", label: "Output per attempt" },
+          { value: "375", label: "Total observed output" }
+        ]
+      }
+    ],
+    verdictLabel: "VS",
+    verdict: "Path A owns the higher peak; Path B owns the broader ledger.",
+    rationale: "The source explicitly contrasts two entities across comparable evidence.",
+    ...overrides
+  };
+}
+
+export function numbersFeature(sourceBlockIds, overrides = {}) {
+  return {
+    id: "statistical-exhibit",
+    kind: "numbers",
+    anchorSourceBlockId: sourceBlockIds[0],
+    sourceBlockIds,
+    eyebrow: "Exhibit 1.1 · Statistical case",
+    title: "What the numbers actually separate",
+    deck: "Direct comparison is clearest when each measure keeps its original context.",
+    panels: [
+      {
+        label: "Output rate",
+        entries: [
+          { label: "Path A", value: "0.68", barPercent: 68 },
+          { label: "Path B", value: "0.59", barPercent: 59 }
+        ]
+      },
+      {
+        label: "Best observed rate",
+        entries: [
+          { label: "Path A", value: "0.96", barPercent: 96 },
+          { label: "Path B", value: "0.91", barPercent: 91 }
+        ]
+      }
+    ],
+    highlight: {
+      value: "0.09",
+      text: "The gap matters, but it cannot explain every qualitative difference by itself."
+    },
+    rationale: "The source contains comparable quantitative evidence and a qualified takeaway.",
+    ...overrides
+  };
+}
+
+export function bookPlan({ manuscriptHash, sourceBlockId, theme = "technical", coverRoute = "photo", bodyColumns = "text-single", chapterOpeners = false, aestheticRequired = false, diagrams = [], featurePages = [], images = [], classifications } = {}) {
+  return {
+    version: 3,
     manuscriptHash,
     editorial: { audience: "readers", genre: "manual", purpose: "teach", tone: "clear" },
     theme: { id: theme, rationale: "The theme matches the manuscript's editorial purpose." },
@@ -100,10 +188,14 @@ export function bookPlan({ manuscriptHash, sourceBlockId, theme = "technical", c
       policy: "selective",
       cover: coverDecision(sourceBlockId ? { sourceBlockIds: [sourceBlockId] } : {}),
       diagrams,
+      featurePages,
       images
     },
     classifications: classifications ?? (sourceBlockId ? [{ sourceBlockId, role: "narrative", treatment: "prose", rationale: "Preserve ordinary source prose." }] : []),
-    exceptions: [{ rule: "waive-diagrams", scope: "book", rationale: "The fixture has no relationship that needs another diagram." }],
+    exceptions: [
+      { rule: "waive-diagrams", scope: "book", rationale: "The fixture has no relationship that needs another diagram." },
+      { rule: "waive-feature-pages", scope: "book", rationale: "The compact fixture does not need a full-page editorial exhibit." }
+    ],
     aestheticReview: { required: aestheticRequired, criteria: ["clear hierarchy", "balanced page rhythm"] }
   };
 }

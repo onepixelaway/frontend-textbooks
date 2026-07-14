@@ -4,7 +4,7 @@ import test from "node:test";
 import { parseManuscript } from "../scripts/lib/manuscript.mjs";
 import { assertPlanMatchesManuscript, assertPlanPolicy } from "../scripts/lib/plan-contract.mjs";
 import { STYLE_NAMES } from "../themes/index.mjs";
-import { bookPlan, diagramDecision } from "./helpers/fixture-assets.mjs";
+import { bookPlan, diagramDecision, frameworkFeature, numbersFeature, scorecardFeature } from "./helpers/fixture-assets.mjs";
 
 function fixture() {
   const parsed = parseManuscript("# Contract Book\n\n## Chapter\n\nA source paragraph about a clear writing path.");
@@ -18,6 +18,7 @@ function fixture() {
     chapterOpeners: false,
     selectedCoverRoute: "photo",
     requireDiagrams: false,
+    requireFeaturePages: false,
     requirePartImages: false
   };
   const plan = bookPlan({ manuscriptHash: parsed.sourceManifest.sha256, sourceBlockId, theme: "technical" });
@@ -29,7 +30,7 @@ test("plan/config coherence rejects contradictory theme, columns, route, and ope
   for (const [field, value, pattern] of [
     ["style", "alumni", /theme\.id.*conflicts/i],
     ["bodyColumns", "text-two", /bodyColumns.*conflicts/i],
-    ["selectedCoverRoute", "press", /coverRoute.*conflicts/i],
+    ["selectedCoverRoute", "minimal", /coverRoute.*conflicts/i],
     ["chapterOpeners", true, /chapterOpeners.*conflicts/i]
   ]) {
     assert.throws(() => assertPlanPolicy(plan, { ...config, [field]: value }, parsed), pattern);
@@ -57,6 +58,48 @@ test("structured diagrams reject unknown edges and remain grounded in source ids
   const invalid = structuredClone(plan);
   invalid.visuals.diagrams = [diagramDecision([sourceBlockId], { edges: [{ from: "notice", to: "missing" }] })];
   assert.throws(() => assertPlanMatchesManuscript(invalid, parsed, STYLE_NAMES), /unknown node/i);
+});
+
+test("structured feature pages require valid grounding, unique ids, and kind-specific bounded content", () => {
+  const { parsed, sourceBlockId, plan } = fixture();
+  const valid = structuredClone(plan);
+  valid.visuals.featurePages = [
+    frameworkFeature([sourceBlockId]),
+    scorecardFeature([sourceBlockId]),
+    numbersFeature([sourceBlockId])
+  ];
+  assert.doesNotThrow(() => assertPlanMatchesManuscript(valid, parsed, STYLE_NAMES));
+
+  const unknownAnchor = structuredClone(valid);
+  unknownAnchor.visuals.featurePages[0].anchorSourceBlockId = "source-p-missing";
+  assert.throws(() => assertPlanMatchesManuscript(unknownAnchor, parsed, STYLE_NAMES), /feature page.*unknown.*anchor/i);
+
+  const duplicate = structuredClone(valid);
+  duplicate.visuals.featurePages[1].id = duplicate.visuals.featurePages[0].id;
+  assert.throws(() => assertPlanMatchesManuscript(duplicate, parsed, STYLE_NAMES), /duplicate feature page id/i);
+
+  const unbounded = structuredClone(valid);
+  unbounded.visuals.featurePages[2].panels[0].entries.push({ label: "Path C", value: "0.42", barPercent: 42 });
+  assert.throws(() => assertPlanMatchesManuscript(unbounded, parsed, STYLE_NAMES), /numbers feature page.*two entries/i);
+
+  const mixedGrammar = structuredClone(valid);
+  mixedGrammar.visuals.featurePages[0].verdict = "A framework cannot carry scorecard-only fields.";
+  assert.throws(() => assertPlanMatchesManuscript(mixedGrammar, parsed, STYLE_NAMES), /fields for a different feature grammar/i);
+});
+
+test("designed nonfiction requires a planned skim page or an explicit waiver", () => {
+  const { parsed, sourceBlockId, config, plan } = fixture();
+  const requiredConfig = { ...config, requireFeaturePages: true };
+  const missing = structuredClone(plan);
+  missing.exceptions = missing.exceptions.filter((entry) => entry.rule !== "waive-feature-pages");
+  assert.throws(() => assertPlanPolicy(missing, requiredConfig, parsed), /requires at least one structured.*featurePages/i);
+
+  const planned = structuredClone(missing);
+  planned.visuals.featurePages = [frameworkFeature([sourceBlockId])];
+  assert.doesNotThrow(() => assertPlanPolicy(planned, requiredConfig, parsed));
+
+  const waived = structuredClone(plan);
+  assert.doesNotThrow(() => assertPlanPolicy(waived, { ...config, requireFeaturePages: false }, parsed));
 });
 
 test("aesthetic criteria cannot restate measurable layout configuration", () => {

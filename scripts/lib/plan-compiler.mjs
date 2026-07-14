@@ -35,10 +35,24 @@ export function compilePlan(plan, parsed, book, coverAsset = null) {
     return { scope: image.scope, subject: image.subject, altText: image.altText, asset: part.image };
   });
 
+  const featurePagesByChapter = new Map();
+  const featurePages = plan.visuals.featurePages.map((feature) => {
+    const chapter = parsed.chapters.find((candidate) =>
+      candidate.sourceBlockId === feature.anchorSourceBlockId ||
+      candidate.blocks.some((block) => block.sourceBlockId === feature.anchorSourceBlockId));
+    if (!chapter) throw new Error(`book-plan feature page ${feature.id} anchor does not belong to a rendered chapter: ${feature.anchorSourceBlockId}`);
+    const compiled = { ...feature, chapterId: chapter.id };
+    const chapterFeatures = featurePagesByChapter.get(chapter.id) ?? [];
+    chapterFeatures.push(compiled);
+    featurePagesByChapter.set(chapter.id, chapterFeatures);
+    return compiled;
+  });
+
   return {
     annotations,
+    featurePagesByChapter,
     receipt: {
-      schemaVersion: 2,
+      schemaVersion: 3,
       status: "applied",
       resolved: {
         theme: book.style,
@@ -66,6 +80,7 @@ export function compilePlan(plan, parsed, book, coverAsset = null) {
       },
       classifications: plan.classifications.map(({ sourceBlockId, role, treatment }) => ({ sourceBlockId, role, treatment })),
       diagrams: plan.visuals.diagrams.map(({ sourceBlockIds, grammar, title, nodes, edges, caption, takeaway }) => ({ sourceBlockIds, grammar, title, nodes, edges, caption, takeaway })),
+      featurePages,
       images
     }
   };

@@ -34,5 +34,6 @@ export const REPORT_CHECKS = Object.freeze([
 export const REPAIR_ACTIONS = Object.freeze(Object.fromEntries([
   ...REPORT_CHECKS.filter((check) => check.actions).map((check) => [check.code, check.actions]),
   ["DIAGRAM_REQUIRED", ["rewrite-visual", "approve-exception"]],
+  ["FEATURE_PAGE_REQUIRED", ["rewrite-visual", "approve-exception"]],
   ["SOURCE_COVERAGE_LOW", ["repaginate"]]
 ]));

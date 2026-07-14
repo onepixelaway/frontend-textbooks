@@ -14,7 +14,7 @@ import {
 import { sha256 } from "../scripts/lib/content-hash.mjs";
 import { createCoverGenerationReceipt, createCoverImageRequest } from "../scripts/lib/cover-image-request.mjs";
 import { writeBookProject } from "./helpers/book-project.mjs";
-import { diagramDecision, pngBytes } from "./helpers/fixture-assets.mjs";
+import { diagramDecision, frameworkFeature, numbersFeature, pngBytes, scorecardFeature } from "./helpers/fixture-assets.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(new URL("..", import.meta.url).pathname);
@@ -193,6 +193,40 @@ A short five-step source paragraph also remains verbatim after its diagram.`;
   await writeFile(join(project.outputDir, "cover-generation-receipt.json"), JSON.stringify(generationReceipt));
   await execFileAsync(process.execPath, [buildScript, project.configPath, project.manuscriptPath, project.planPath], { cwd: root, timeout: 30_000 });
   return { ...project, longParagraph, paragraphIds };
+}
+
+async function buildFeatureScaffold(directory) {
+  const manuscript = `# Editorial Exhibits
+
+## A richer chapter
+
+The manuscript compares two paths: one produces a stronger peak while the other accumulates a broader and more durable record.
+
+Readers should examine signal, context, and weighting before deciding which path better answers the question.
+
+The measured rates are 0.68 versus 0.59, while the best observed rates are 0.96 versus 0.91; the numerical gap matters but does not explain every qualitative difference.`;
+  const project = await writeBookProject(directory, {
+    manuscript,
+    configOverrides: {
+      title: "Editorial Exhibits",
+      outputDir: join(directory, "book"),
+      requireFeaturePages: true
+    }
+  });
+  const paragraphIds = project.parsed.sourceManifest.blocks.filter((block) => block.kind === "p").map((block) => block.id);
+  project.plan.visuals.featurePages = [
+    scorecardFeature(paragraphIds, { anchorSourceBlockId: paragraphIds[0] }),
+    frameworkFeature(paragraphIds, { anchorSourceBlockId: paragraphIds[1] }),
+    numbersFeature(paragraphIds, { anchorSourceBlockId: paragraphIds[2] })
+  ];
+  project.plan.exceptions = project.plan.exceptions.filter((entry) => entry.rule !== "waive-feature-pages");
+  await writeFile(project.planPath, JSON.stringify(project.plan));
+  const request = createCoverImageRequest({ config: project.config, plan: project.plan, outputDir: project.outputDir });
+  await writeFile(join(project.outputDir, "cover-image-request.json"), JSON.stringify(request));
+  const generationReceipt = createCoverGenerationReceipt({ config: project.config, plan: project.plan, outputDir: project.outputDir });
+  await writeFile(join(project.outputDir, "cover-generation-receipt.json"), JSON.stringify(generationReceipt));
+  await execFileAsync(process.execPath, [buildScript, project.configPath, project.manuscriptPath, project.planPath], { cwd: root, timeout: 30_000 });
+  return { ...project, paragraphIds };
 }
 
 function simpleBook(body, { head = "", attributes = "" } = {}) {
@@ -622,12 +656,12 @@ The second paragraph gives the browser paginator enough content to build and ver
   assert.equal(report.desktop.tailLayouts[0].layout, "text-tail");
 });
 
-test("the press cover route remains inside the mobile viewport", async () => {
-  const directory = await temporaryDirectory("frontend-textbooks-press-cover-");
+test("the minimal cover route remains inside the mobile viewport", async () => {
+  const directory = await temporaryDirectory("frontend-textbooks-minimal-cover-");
   const title = "Field Notes on Better Systems";
   const project = await buildScaffold(directory, {
-    config: { title, selectedCoverRoute: "press" },
-    plan: { coverRoute: "press" },
+    config: { title, selectedCoverRoute: "minimal" },
+    plan: { coverRoute: "minimal" },
     manuscript: `# ${title}\n\n## Chapter\n\nA short source paragraph.`
   });
 
@@ -638,13 +672,10 @@ test("the press cover route remains inside the mobile viewport", async () => {
   assert.deepEqual(report.mobile.fixedPageOverflows, []);
 });
 
-test("every cover route integrates artwork across the long-title, focal-point, and contrast matrix", async (t) => {
+test("every supported cover route integrates artwork across the long-title, focal-point, and contrast matrix", async (t) => {
   const cases = [
-    { route: "type", title: "Clear Systems", subtitle: "A compact field guide", author: "M. Lee", focalPoint: { x: 8, y: 9 }, rgb: [232, 220, 188] },
-    { route: "symbol", title: "Field Notes for Building Better Systems Under Everyday Pressure", subtitle: "How teams notice, reduce, and redesign hidden work", author: "Alexandra Montgomery", focalPoint: { x: 92, y: 10 }, rgb: [19, 38, 70] },
-    { route: "photo", title: "The Practical Architecture of Attention, Decisions, Collaboration, and Sustainable Change in Overloaded Organizations", subtitle: "A manuscript-grounded approach for leaders and working teams", author: "Cassandra Elena Weatherford-Santos", focalPoint: { x: 7, y: 91 }, rgb: [226, 235, 244] },
-    { route: "minimal", title: "RecontextualizationWithoutCompromise", subtitle: "A resilient method for unusually constrained systems", author: "Jo A. Rivera", focalPoint: { x: 93, y: 92 }, rgb: [24, 24, 26] },
-    { route: "press", title: "A Very Long but Readable Series Title About Making Complex Work Feel Deliberate, Humane, and Clear", subtitle: "Volume one in the practical systems library", author: "The Center for Applied Editorial Research", focalPoint: { x: 50, y: 50 }, rgb: [118, 77, 45], coverBandHeight: 2.8 }
+    { route: "photo", title: "The Practical Architecture of Attention, Decisions, Collaboration, and Sustainable Change in Overloaded Organizations", subtitle: "A manuscript-grounded approach for leaders and working teams", author: "Cassandra Elena Weatherford-Santos", focalPoint: { x: 7, y: 91 }, rgb: [226, 235, 244], coverBandHeight: 2.8 },
+    { route: "minimal", title: "RecontextualizationWithoutCompromise", subtitle: "A resilient method for unusually constrained systems", author: "Jo A. Rivera", focalPoint: { x: 93, y: 8 }, rgb: [24, 24, 26] }
   ];
 
   for (const [index, item] of cases.entries()) {
@@ -756,6 +787,36 @@ test("structured diagrams are additive, bounded, responsive, and PDF-preserving"
   assert.ok(normalizedPdf.includes(project.longParagraph), "the exact long grounding paragraph must remain extractable from the PDF");
   const receipt = JSON.parse(await readFile(join(project.outputDir, "book-plan-receipt.json")));
   assert.deepEqual(receipt.diagrams.map((diagram) => diagram.sourceBlockIds[0]), project.paragraphIds);
+});
+
+test("structured scorecard, framework, and numbers pages are additive, responsive, and reviewable", async () => {
+  const directory = await temporaryDirectory("frontend-textbooks-feature-pages-");
+  const project = await buildFeatureScaffold(directory);
+  const finalization = await runBrowser("finalize", project.outputDir);
+  assert.equal(finalization.status, 0, `${finalization.stdout}\n${finalization.stderr}`);
+  const result = JSON.parse(finalization.stdout);
+  for (const viewport of ["desktop", "print", "mobile"]) {
+    assert.equal(result.verification[viewport].sourcePreservation.ratio, 1);
+    assert.equal(result.verification[viewport].sourcePreservation.blockRatio, 1);
+    assert.equal(result.verification[viewport].featurePageCount, 3);
+    assert.deepEqual(result.verification[viewport].fixedPageOverflows, []);
+  }
+  assert.deepEqual(result.verification.desktop.customPages, [
+    "feature-comparison-scorecard",
+    "feature-reader-framework",
+    "feature-statistical-exhibit"
+  ]);
+  for (const viewport of ["desktop", "mobile"]) {
+    for (const ordinal of ["01", "02", "03"]) {
+      await readFile(join(project.outputDir, "verification", `${viewport}-feature-${ordinal}.png`));
+    }
+  }
+  assert.ok(result.pdf.pdf.textPreservation.wordRatio >= 0.9, JSON.stringify(result.pdf.pdf.textPreservation));
+  assert.ok(result.pdf.pdf.textPreservation.blockRatio >= 0.9, JSON.stringify(result.pdf.pdf.textPreservation));
+  const receipt = JSON.parse(await readFile(join(project.outputDir, "book-plan-receipt.json")));
+  assert.deepEqual(receipt.featurePages.map(({ kind }) => kind), ["scorecard", "framework", "numbers"]);
+  assert.ok(receipt.featurePages.every((feature) => feature.chapterId === "a-richer-chapter"));
+  assert.deepEqual(receipt.featurePages.flatMap((feature) => feature.sourceBlockIds).filter((id, index, ids) => ids.indexOf(id) === index), project.paragraphIds);
 });
 
 test("multi-page two- and three-column books preserve ordered source text in PDF", async (t) => {

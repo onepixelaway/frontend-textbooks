@@ -15,6 +15,7 @@ import { resolveBookPaths } from "./lib/book-paths.mjs";
 import { assertCoverGenerationReceiptFile, assertCoverImageRequestFile } from "./lib/cover-image-request.mjs";
 import { assertCoverAssetNotReused, inspectCoverBitmap, resolveRequiredCoverAsset } from "./lib/cover-assets.mjs";
 import { sha256 } from "./lib/content-hash.mjs";
+import { defaultRequireDiagrams, defaultRequireFeaturePages } from "./lib/book-policy.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(scriptDir, "..");
@@ -23,11 +24,8 @@ const LETTER_HEIGHT_IN = 11;
 const DEFAULT_COVER_BAND_HEIGHT_IN = 3.55;
 const BODY_COLUMN_CLASSES = ["text-two", "text-single", "text-three"];
 const COVER_ROUTES = Object.freeze([
-  { id: "type", label: "Type-led editorial", decoration: () => "" },
-  { id: "symbol", label: "Conceptual symbol", decoration: () => '<div class="route-symbol-mark" aria-hidden="true"><span></span><span></span><span></span></div>' },
   { id: "photo", label: "Editorial image route", decoration: () => "" },
-  { id: "minimal", label: "High-contrast minimal", decoration: () => '<div class="route-minimal-mark" aria-hidden="true"></div>' },
-  { id: "press", label: "Press / series system", decoration: (book) => `<div class="route-press-series" aria-hidden="true">${escapeHtml(book.bookType)}</div>` }
+  { id: "minimal", label: "High-contrast minimal", decoration: () => '<div class="route-minimal-mark" aria-hidden="true"></div>' }
 ]);
 const COVER_ROUTE_IDS = COVER_ROUTES.map((route) => route.id);
 
@@ -51,6 +49,7 @@ book.json fields:
   coverBandHeight optional inches for the bottom cover band, default 3.55
   requirePartImages optional boolean; defaults to true when coverImage is set and the manuscript has parts
   requireDiagrams optional boolean; defaults to true for designed nonfiction, false for plain/literary reader editions
+  requireFeaturePages optional boolean; defaults to true for designed nonfiction, false for plain/literary reader editions
   chapterOpeners optional boolean; default false. When false, chapters start directly on text pages.
   chapterClosers optional object keyed by chapter id, title, or number for generated chapter-close copy
   partImages   optional object keyed by part id, title, label, or number for generated part-divider art; if provided, must cover every part and use unique values
@@ -203,15 +202,6 @@ function booleanValue(value, field, fallback) {
   throw new Error(`${field} must be a boolean.`);
 }
 
-function defaultRequireDiagrams(config) {
-  const style = plainText(config.style ?? "").toLowerCase();
-  const type = plainText(config.bookType ?? "").toLowerCase();
-  const title = plainText(config.title ?? "").toLowerCase();
-  const combined = `${style} ${type} ${title}`;
-  if (/\b(plain|literary|reader|novel|fiction|poetry|memoir|essay collection)\b/.test(combined)) return false;
-  return true;
-}
-
 function normalizeMap(value, field, cleanValue = plainText) {
   if (value === undefined || value === null) return {};
   if (!isPlainObject(value)) throw new Error(`${field} must be an object keyed by book ids, titles, labels, or numbers.`);
@@ -286,6 +276,7 @@ const book = {
   coverBandHeight: numberInRange(config.coverBandHeight, DEFAULT_COVER_BAND_HEIGHT_IN, 2.8, 4.4),
   requirePartImages: hasPlanException(plan, "waive-part-images") ? false : booleanValue(config.requirePartImages, "requirePartImages", Boolean(coverImage && parsed.parts.length)),
   requireDiagrams: hasPlanException(plan, "waive-diagrams") ? false : booleanValue(config.requireDiagrams, "requireDiagrams", defaultRequireDiagrams(config)),
+  requireFeaturePages: hasPlanException(plan, "waive-feature-pages") ? false : booleanValue(config.requireFeaturePages, "requireFeaturePages", defaultRequireFeaturePages(config)),
   chapterOpeners: plan.layout.chapterOpeners,
   style: plan.theme.id,
   themeOverrides: config.themeOverrides ?? {},
@@ -481,6 +472,42 @@ body { font-size: 10.7pt; }
 .text-page.has-tail-furniture .tail-furniture::before { content: ""; width: 0.08in; min-height: 0.7in; background: var(--accent); }
 .tail-label { margin: 0 0 0.06in; font-family: var(--font-ui); font-size: 7.5pt; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
 .tail-quote { margin: 0; max-width: 5.1in; font-family: var(--font-display); font-size: 16pt; line-height: 1.24; color: var(--heading-ink); text-indent: 0; }
+.feature-page .page-inner { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0.26in; padding: 0.72in 0.78in; }
+.feature-page h1 { max-width: 6.65in; margin: 0; font-size: 35pt; line-height: 0.98; }
+.feature-page.feature-title-long h1 { font-size: 29pt; line-height: 1.02; }
+.feature-header { display: grid; gap: 0.12in; }
+.feature-deck { max-width: 6.1in; margin: 0; font-size: 12.5pt; line-height: 1.44; color: var(--muted-ink); text-indent: 0; }
+.framework-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 0.14in 0.34in; min-height: 0; }
+.framework-item { position: relative; display: grid; grid-template-columns: 0.52in minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 0.04in 0.12in; align-content: start; padding: 0.17in 0.12in 0.14in 0; border-top: 1px solid var(--rule); }
+.framework-number { grid-row: 1 / 3; font: 900 24pt/1 var(--font-display); color: var(--accent); }
+.framework-item h2 { margin: 0; font: 800 14pt/1.1 var(--font-display); color: var(--deck-ink); }
+.framework-item p { margin: 0; font-size: 9.7pt; line-height: 1.42; text-indent: 0; }
+.framework-footer { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.18in; align-items: center; margin: 0; font: 900 7.5pt/1.2 var(--font-ui); letter-spacing: 0.12em; text-align: center; text-transform: uppercase; color: var(--label-ink); }
+.framework-footer::before, .framework-footer::after { content: ""; height: 0.06in; background: var(--accent); }
+.framework-footer::after { background: var(--deck-ink); }
+.scorecard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5in; min-height: 0; }
+.scorecard-side { display: grid; grid-template-rows: auto auto 1fr; align-content: start; min-width: 0; padding-top: 0.12in; border-top: 0.05in solid var(--accent); }
+.scorecard-side:nth-child(2) { border-color: var(--deck-ink); }
+.scorecard-side h2 { margin: 0 0 0.06in; font-size: 25pt; line-height: 1; }
+.scorecard-descriptor { margin: 0 0 0.18in; font: 800 7.4pt/1.3 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--label-ink); text-indent: 0; }
+.scorecard-metrics { display: grid; align-content: stretch; }
+.scorecard-metric { display: grid; grid-template-columns: minmax(0, 0.9in) minmax(0, 1fr); gap: 0.14in; align-items: baseline; padding: 0.14in 0; border-top: 1px solid var(--rule); }
+.scorecard-metric strong { font: 900 21pt/1 var(--font-display); color: var(--heading-ink); overflow-wrap: anywhere; }
+.scorecard-metric span { font: 700 8pt/1.3 var(--font-ui); letter-spacing: 0.045em; text-transform: uppercase; color: var(--muted-ink); }
+.scorecard-verdict { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.24in; align-items: center; margin: 0; padding-top: 0.2in; border-top: 0.04in solid var(--soft-accent); font-size: 13pt; line-height: 1.35; text-indent: 0; }
+.scorecard-verdict strong { font: 900 42pt/0.8 var(--font-display); color: var(--accent); }
+.numbers-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.16in 0.34in; align-content: start; min-height: 0; }
+.numbers-panel { padding: 0.18in 0; border-top: 1px solid var(--rule); }
+.numbers-panel h2 { margin: 0 0 0.12in; font: 800 10.5pt/1.2 var(--font-ui); color: var(--muted-ink); }
+.numbers-entries { display: grid; gap: 0.09in; }
+.numbers-entry { display: grid; grid-template-columns: minmax(0, 0.82in) minmax(0, 1fr) minmax(0, 0.55in); gap: 0.1in; align-items: center; }
+.numbers-entry-label { font: 800 7.4pt/1 var(--font-ui); text-transform: uppercase; overflow-wrap: anywhere; }
+.numbers-bar { height: 0.16in; overflow: hidden; background: color-mix(in srgb, var(--rule) 28%, var(--page-bg)); }
+.numbers-bar-fill { display: block; height: 100%; background: var(--deck-ink); }
+.numbers-entry:first-child .numbers-bar-fill { background: var(--heading-ink); }
+.numbers-entry strong { text-align: right; font: 900 14pt/1 var(--font-display); color: var(--heading-ink); overflow-wrap: anywhere; }
+.numbers-highlight { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.24in; align-items: center; margin: 0; padding: 0.24in; background: var(--callout-bg); font-size: 12.5pt; line-height: 1.32; text-indent: 0; }
+.numbers-highlight strong { font: 900 38pt/0.9 var(--font-display); color: var(--accent); }
 .planned-callout, .planned-definition { padding: 0.16in 0.18in; border-left: 0.06in solid var(--accent); background: var(--callout-bg); break-inside: avoid; }
 .planned-diagram { padding: 0.18in; border: 1px solid var(--rule); border-radius: 0.06in; background: var(--callout-bg); break-inside: avoid; }
 .diagram-heading { display: grid; gap: 0.04in; }
@@ -515,30 +542,17 @@ body { font-size: 10.7pt; }
 .cover.option-cover.has-unbreakable-title.title-long h1 { font-size: 26pt; }
 .cover.option-cover.has-unbreakable-title.title-very-long h1 { font-size: 20pt; }
 .option-subtitle, .option-author, .cover-route-label { font-family: var(--font-ui); }
-.route-type .page-inner { background: var(--ink); color: #fff; }
-.route-type h1, .route-type p { color: #fff; }
-.route-symbol .page-inner { padding-right: 1.72in; background: var(--page-bg); color: var(--ink); }
-.route-symbol-mark { position: absolute; z-index: 3; right: 0.54in; bottom: 0.54in; width: 0.88in; height: calc(var(--cover-band-height) - 1.08in); display: grid; grid-template-columns: 1fr 0.15in 1fr; gap: 0.08in; }
-.route-symbol-mark span { border: 2px solid var(--ink); }
-.route-symbol-mark span:nth-child(2) { background: var(--accent); border-color: var(--accent); }
 .route-photo .page-inner { background: var(--cover-band, var(--heading-ink)); color: #fff; }
 .route-photo h1, .route-photo p { color: #fff; }
 .route-minimal .page-inner { padding-right: 1.55in; background: var(--page-bg); color: var(--ink); }
 .route-minimal-mark { position: absolute; z-index: 3; right: 0.62in; bottom: 0.58in; width: 0.72in; height: calc(var(--cover-band-height) - 1.16in); background: var(--accent); }
-.route-press { background: var(--page-bg); }
-.route-press .cover-art-frame { inset: 0.26in 0.26in auto; width: auto; height: calc(var(--cover-art-height) - 0.26in); border: 0.08in solid var(--cover-band); }
-.route-press .page-inner { height: var(--cover-band-height); border: 0.08in solid var(--cover-band); border-top: 0; padding: 0.42in 0.58in 0.46in; background: var(--page-bg); color: var(--ink); }
-.route-press-mark { position: absolute; z-index: 3; left: 0.24in; right: 0.24in; bottom: 0; height: 0.14in; background: repeating-linear-gradient(90deg, var(--cover-band) 0 0.45in, transparent 0.45in 0.58in); }
-.route-press-series { position: absolute; z-index: 3; right: 0.62in; bottom: 0.52in; font: 900 8pt/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase; color: var(--cover-band); }
-.route-symbol .cover-kicker, .route-minimal .cover-kicker, .route-press .cover-kicker { color: var(--label-ink); }
+.route-minimal .cover-kicker { color: var(--label-ink); }
 @media screen and (max-width: 920px) {
   .book { gap: 0; }
   .page { margin-bottom: 18px; }
   .text-page { margin-bottom: 0; }
   .option-cover .cover-art-frame { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: var(--cover-art-aspect); }
   .option-cover .page-inner { position: relative; inset: auto; width: 100%; height: auto; min-height: 42vw; padding: 7.5vw; }
-  .route-press .cover-art-frame { width: 92%; margin: 4% 4% 0; border-width: 5px; }
-  .route-press .page-inner { width: 92%; margin: 0 4% 4%; border-width: 5px; border-top: 0; }
   .part-divider.has-part-image .page-inner { height: auto; min-height: 0; grid-template-rows: auto auto; }
   .cover-image, .part-image-frame { position: relative; display: block; min-height: 72vw; inset: auto; }
   .cover-title, .part-divider h1, .chapter-title { font-size: 38pt; }
@@ -550,11 +564,16 @@ body { font-size: 10.7pt; }
   .option-cover.has-unbreakable-title.title-short h1, .cover.option-cover.has-unbreakable-title.title-short h1 { font-size: 25pt; }
   .option-cover.has-unbreakable-title.title-long h1, .cover.option-cover.has-unbreakable-title.title-long h1 { font-size: 19pt; }
   .option-cover.has-unbreakable-title.title-very-long h1, .cover.option-cover.has-unbreakable-title.title-very-long h1 { font-size: 17pt; }
-  .route-symbol .page-inner, .route-minimal .page-inner { padding-right: 26%; }
-  .route-symbol-mark { right: 7%; bottom: 7%; width: 13%; height: 28%; }
+  .route-minimal .page-inner { padding-right: 26%; }
   .route-minimal-mark { top: auto; right: 8.5%; bottom: 8.5%; width: 10%; height: 30%; }
-  .route-press-mark { left: 5%; right: 5%; bottom: 0; }
-  .route-press-series { right: 9%; bottom: 9%; }
+  .feature-page .page-inner { display: block; padding: 8.5%; }
+  .feature-page .chapter-kicker, .feature-page .feature-header, .feature-page .framework-grid, .feature-page .scorecard-grid, .feature-page .numbers-grid { margin-bottom: 1.25rem; }
+  .feature-page h1, .feature-page.feature-title-long h1 { font-size: clamp(27px, 9vw, 35pt); }
+  .framework-grid, .scorecard-grid, .numbers-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
+  .framework-item { min-height: 0; }
+  .framework-footer { grid-template-columns: 0.35fr auto 0.35fr; }
+  .scorecard-verdict, .numbers-highlight { grid-template-columns: 1fr; }
+  .scorecard-verdict strong, .numbers-highlight strong { font-size: 30pt; }
   .diagram-flow, .diagram-layout-comparison, .diagram-layout-matrix { grid-template-columns: 1fr; }
 }`;
 }
@@ -641,9 +660,8 @@ function renderCoverRouteCopy(label, final = false) {
           <p class="option-author no-indent">by ${escapeHtml(book.author)}</p>`;
 }
 
-function renderCoverArt(route) {
-  const pressMark = route.id === "press" ? '<div class="route-press-mark" aria-hidden="true"></div>' : "";
-  return `<figure class="cover-art-frame"><img class="cover-art" src="${escapeHtml(book.coverImage)}" alt="${escapeHtml(book.coverAltText)}" style="--cover-focal-x:${book.coverFocalPoint.x};--cover-focal-y:${book.coverFocalPoint.y}">${pressMark}</figure>`;
+function renderCoverArt() {
+  return `<figure class="cover-art-frame"><img class="cover-art" src="${escapeHtml(book.coverImage)}" alt="${escapeHtml(book.coverAltText)}" style="--cover-focal-x:${book.coverFocalPoint.x};--cover-focal-y:${book.coverFocalPoint.y}"></figure>`;
 }
 
 function renderCoverRoute(route, { final = false } = {}) {
@@ -656,7 +674,7 @@ function renderCoverRoute(route, { final = false } = {}) {
   const label = route.label;
   return `
       <section class="${classes}"${final ? ' id="cover" aria-label="Cover"' : ""} data-cover-route="${route.id}" data-cover-asset="${escapeHtml(book.coverImage)}" data-cover-request-hash="${book.coverRequestHash}">
-        ${renderCoverArt(route)}
+        ${renderCoverArt()}
         ${decoration}
         <div class="page-inner">
           ${renderCoverRouteCopy(label, final)}
@@ -703,6 +721,7 @@ function renderBook() {
 
   const clientChapters = parsed.chapters.map((chapter) => ({
     ...chapter,
+    featurePages: compiledPlan.featurePagesByChapter.get(chapter.id) ?? [],
     blocks: chapter.blocks.map(({ expectedText: _expectedText, ...block }) => ({
       ...block,
       ...(compiledPlan.annotations.has(block.sourceBlockId) ? { plan: compiledPlan.annotations.get(block.sourceBlockId) } : {})
@@ -724,9 +743,9 @@ function renderBook() {
     <a href="cover-options.html">Cover options</a>
   </div>
   <main class="book-shell">
-    <article class="book" id="book" data-require-part-images="${book.requirePartImages ? "true" : "false"}" data-require-diagrams="${book.requireDiagrams ? "true" : "false"}">${body.join("\n")}</article>
+    <article class="book" id="book" data-require-part-images="${book.requirePartImages ? "true" : "false"}" data-require-diagrams="${book.requireDiagrams ? "true" : "false"}" data-require-feature-pages="${book.requireFeaturePages ? "true" : "false"}">${body.join("\n")}</article>
   </main>
-  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: clientChapters, sourceManifest: parsed.sourceManifest, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages, requireDiagrams: book.requireDiagrams })}</script>
+  <script type="application/json" id="book-data">${jsonForHtmlScript({ chapters: clientChapters, sourceManifest: parsed.sourceManifest, bodyColumns: book.bodyColumns, requirePartImages: book.requirePartImages, requireDiagrams: book.requireDiagrams, requireFeaturePages: book.requireFeaturePages })}</script>
   <script>${serializeBookClientProgram()}</script>
 </body>
 </html>`;
@@ -770,6 +789,7 @@ writeFileSync(buildManifestPath, JSON.stringify({
     effectiveDpi: coverAssetReport.effectiveDpi,
     minimumDpi: coverAssetReport.minimumDpi
   },
+  featurePages: compiledPlan.receipt.featurePages.map(({ id, kind, chapterId, anchorSourceBlockId, sourceBlockIds, title }) => ({ id, kind, chapterId, anchorSourceBlockId, sourceBlockIds, title })),
   source: {
     sha256: parsed.sourceManifest.sha256,
     wordCount: parsed.sourceManifest.totalWords,
@@ -792,6 +812,10 @@ writeFileSync(buildSummaryPath, JSON.stringify({
     frame: coverAssetReport.frame,
     effectiveDpi: coverAssetReport.effectiveDpi,
     minimumDpi: coverAssetReport.minimumDpi
+  },
+  featurePages: {
+    count: compiledPlan.receipt.featurePages.length,
+    kinds: compiledPlan.receipt.featurePages.map((feature) => feature.kind)
   }
 }, null, 2));
 writeFileSync(sourceInventoryPath, JSON.stringify(createSourceInventory(parsed), null, 2));

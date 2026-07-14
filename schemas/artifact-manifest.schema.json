@@ -21,7 +21,7 @@
         "requestHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "generationReceiptHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "generationId": { "type": "string", "minLength": 16 },
-        "route": { "type": "string", "enum": ["type", "symbol", "photo", "minimal", "press"] },
+        "route": { "type": "string", "enum": ["photo", "minimal"] },
         "subject": { "type": "string", "minLength": 1 },
         "altText": { "type": "string", "minLength": 20 },
         "width": { "type": "integer", "minimum": 1 },

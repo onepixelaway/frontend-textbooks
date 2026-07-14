@@ -404,7 +404,7 @@ function validateAestheticReview(context) {
   const { sheets: sheetEvidence, aggregateHash } = contactSheetEvidence(contactSheets, context.outputDir);
   const renderReportHash = hashFile(renderReportPath);
   const visualEvidence = readdirSync(context.verificationDir)
-    .filter((name) => /^(?:desktop-cover|mobile-(?:cover|late-text|text-first|text-last|part-\d+))\.png$/u.test(name))
+    .filter((name) => /^(?:desktop-(?:cover|feature-\d+)|mobile-(?:cover|late-text|text-first|text-last|part-\d+|feature-\d+))\.png$/u.test(name))
     .sort()
     .map((name) => ({ path: relativePath(context.outputDir, join(context.verificationDir, name)), sha256: hashFile(join(context.verificationDir, name)) }));
   const facts = resolvedPlanFacts(context.config, context.plan);
@@ -414,6 +414,8 @@ function validateAestheticReview(context) {
     chapterOpeners: facts.chapterOpeners,
     coverRoute: facts.coverRoute,
     imagePolicy: facts.imagePolicy,
+    featurePagesRequired: facts.featurePagesRequired,
+    featurePages: context.plan.visuals.featurePages.map(({ id, kind, title, anchorSourceBlockId, sourceBlockIds }) => ({ id, kind, title, anchorSourceBlockId, sourceBlockIds })),
     coverRequired: true
   };
   const evidenceByName = new Map(visualEvidence.map((entry) => [entry.path.split("/").at(-1), entry]));

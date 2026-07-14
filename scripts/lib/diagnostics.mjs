@@ -25,6 +25,7 @@ const PHASES = Object.freeze({
   NARROW_FLOW: "pagination",
   TOC_TARGET_MISSING: "structure",
   DIAGRAM_REQUIRED: "structure",
+  FEATURE_PAGE_REQUIRED: "structure",
   SOURCE_COVERAGE_LOW: "source"
 });
 
@@ -151,6 +152,7 @@ export function normalizeDiagnostics(reports) {
       values(report[field]).forEach((value, index) => items.push(diagnostic(code, viewport, value, index)));
     }
     if (report.requireDiagrams && !report.diagramCount) items.push(diagnostic("DIAGRAM_REQUIRED", viewport, {}, 0, "Required diagram policy found no diagram"));
+    if (report.requireFeaturePages && !report.featurePageCount) items.push(diagnostic("FEATURE_PAGE_REQUIRED", viewport, {}, 0, "Required feature-page policy found no full-page editorial exhibit"));
   }
   const uniqueItems = new Map();
   for (const item of items) {

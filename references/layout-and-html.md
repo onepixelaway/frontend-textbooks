@@ -1,6 +1,6 @@
 # Layout and HTML
 
-Use semantic HTML and the bundled scaffold for ordinary Markdown prose. Customize manuscript-specific diagrams, figures, tools, and page pacing after the deterministic build.
+Use semantic HTML and the bundled scaffold for ordinary Markdown prose. Express supported manuscript-specific diagrams and full-page exhibits in `book-plan.json`; do not patch generated HTML after the deterministic build.
 
 ## Print structure
 
@@ -10,7 +10,7 @@ Use semantic HTML and the bundled scaffold for ordinary Markdown prose. Customiz
 - Keep headings with their first paragraph/list. Avoid orphaned captions and short stranded columns.
 - Let the paginator measure chapter tails: very short tails become `.text-tail`, medium-short tails with natural block boundaries become `.text-stack`, and nearly full pages retain their configured columns. It may rebalance one or two complete blocks from the preceding page.
 - Reserve layout space for bottom furniture; never position it over prose.
-- Mark custom feature pages with `data-verify-feature`; legacy `.feature-page`, `.scorecard-page`, and `.numbers-page` classes remain discoverable.
+- Planned `framework`, `scorecard`, and `numbers` exhibits render as atomic `.feature-page` sheets with `data-verify-feature`, explicit grounding IDs, semantic reading order, and responsive mobile collapse. Legacy custom feature classes remain discoverable, but supported feature content belongs in `visuals.featurePages`.
 
 ## Mobile
 

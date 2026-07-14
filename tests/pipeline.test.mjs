@@ -400,6 +400,8 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
     chapterOpeners: false,
     coverRoute: "photo",
     imagePolicy: "selective",
+    featurePagesRequired: false,
+    featurePages: [],
     coverRequired: true
   });
   assert.equal(request.coverEvidence.asset, "assets/cover.png");
@@ -464,9 +466,9 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
   );
 
   const changedConfig = JSON.parse(await readFile(paths.configPath));
-  changedConfig.selectedCoverRoute = "press";
+  changedConfig.selectedCoverRoute = "minimal";
   changedPlan.aestheticReview.criteria.pop();
-  changedPlan.layout.coverRoute = "press";
+  changedPlan.layout.coverRoute = "minimal";
   await writeFile(paths.configPath, JSON.stringify(changedConfig));
   await writeFile(paths.planPath, JSON.stringify(changedPlan));
   await refreshCoverRequest(paths);
@@ -475,6 +477,6 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
     /requestHash does not match/i
   );
   const changedRequest = JSON.parse(await readFile(join(paths.outputDir, ".verification", "aesthetic-review-request.json")));
-  assert.equal(changedRequest.resolved.coverRoute, "press");
+  assert.equal(changedRequest.resolved.coverRoute, "minimal");
   assert.notEqual(changedRequest.requestHash, request.requestHash);
 });

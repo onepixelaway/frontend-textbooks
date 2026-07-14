@@ -2,15 +2,15 @@
 
 Use this reference when a book uses browser-side pagination, generated feature pages, web fonts, or any export path where `networkidle` is unreliable.
 
-## Scaffold-Plus-Enhancement
+## Deterministic Scaffold and Planned Features
 
 For long prose books that still need designed interiors:
 
-1. Keep `manuscript.md` and `book.json` as the source baseline.
-2. Run `scripts/build-html-book.mjs` for parsing, cover/title/TOC, page numbers, mobile collapse behavior, browser pagination, and overflow assertions.
-3. Add a deterministic enhancement script that reruns after the scaffold and injects manuscript-specific CSS/pages: image plates, canvases, model cards, anatomy pages, taxonomy maps, cover-option boards, and route-specific cover refinements.
-4. Place feature pages after natural chapter mounts or part boundaries so the browser paginator can still create body pages safely.
-5. After any HTML/CSS/asset change, rerun the scaffold, rerun the enhancement, rerun verification, and re-export the PDF. Do not deliver a stale PDF from an earlier HTML build.
+1. Keep `manuscript.md`, `book.json`, and `book-plan.json` as the source baseline.
+2. Encode supported full-page framework, scorecard, and numbers exhibits in `visuals.featurePages`; do not inject them into generated HTML afterward.
+3. Run `scripts/build-html-book.mjs` for parsing, cover/title/TOC, feature placement, page numbers, mobile collapse behavior, browser pagination, and overflow assertions.
+4. The renderer places planned exhibits after the chapter containing their anchor source block, preserving every original source block in order.
+5. After any plan, CSS, or asset change, rerun the deterministic build, verification, and PDF export. Do not deliver a stale PDF from an earlier plan or HTML build.
 
 ## Readiness-Gated Export
 
