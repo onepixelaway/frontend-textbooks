@@ -52,7 +52,7 @@ node "$SKILL_DIR/scripts/book-pipeline.mjs" inventory \
 
 After reading the manuscript and `planning-inventory.json`, present three numbered color-scheme choices grounded in its subject, tone, audience, and cultural context. Mark one as Recommended and explain the content connection in one sentence. Give each option a short name and representative role-based hex swatches; include any palette the user already requested as a choice. Ask which scheme they want, allow a different direction, and wait for the user's answer. Do not plan, generate artwork, or build while this decision is unresolved.
 
-Record the answer in `book.json`: a registered base theme in `style` and validated semantic colors in `themeOverrides`. Keep the recommendation rationale in `book-plan.json` under `theme.rationale`; do not create a second palette source of truth. Read [references/intake-and-planning.md](references/intake-and-planning.md) for the compact question format and palette rules.
+Record the answer in `book.json`: a registered base theme in `style` and validated semantic colors in `themeOverrides`. Those resolved colors govern both page CSS and the compiled palette section of generated-image prompts. Keep the recommendation rationale in `book-plan.json` under `theme.rationale`; do not create a second palette source of truth. Read [references/intake-and-planning.md](references/intake-and-planning.md) for the compact question format and palette rules.
 
 ### 3. Make the model plan
 
@@ -69,7 +69,7 @@ node "$SKILL_DIR/scripts/prepare-cover-image.mjs" \
   book.json manuscript.md book-plan.json
 ```
 
-When preparation returns `cover-generation-required`, read `cover-image-request.json`, call the available image-generation tool with its exact `prompt`, and save the result at its exact `targetAsset`. Do not rewrite the theme prompt or substitute supplied, stock, generic, or previously generated art. An occupied target without current matching provenance fails closed; `cover-ready` means the exact current request, receipt, and bytes were already revalidated. Then bind a newly generated bitmap to this manuscript and request:
+When preparation returns `cover-generation-required`, read `cover-image-request.json`, call the available image-generation tool with its exact `prompt`, and save the result at its exact `targetAsset`. Its `palette` is compiled from the resolved theme colors and participates in the request hash. Reuse `palette.instruction` unchanged in prompts for any additional editorial illustrations. Do not rewrite the theme or palette prose or substitute supplied, stock, generic, or previously generated art. An occupied target without current matching provenance fails closed; `cover-ready` means the exact current request, receipt, and bytes were already revalidated. Then bind a newly generated bitmap to this manuscript and request:
 
 ```bash
 node "$SKILL_DIR/scripts/record-cover-image.mjs" \
@@ -126,7 +126,7 @@ Deliver the HTML, PDF, approximate page count, word and exact-block preservation
 - Use measured `.page.text-page` layouts for designed prose. Two columns suit analytical reading; one column suits slow emphasis; three columns suit short modular material.
 - Recommend color from the manuscript's meaning, not a generic genre preset, and let the user make the final choice before planning.
 - Add 2–4 manuscript-grounded full-page exhibits for designed nonfiction when the source supports them. Use `framework` for reusable lenses, `scorecard` for two-sided cases, and `numbers` for bounded comparative statistics; keep inline diagrams for sequence, hierarchy, anatomy, taxonomy, matrix, or system relationships.
-- Always generate manuscript-grounded cover artwork. Generate additional editorial images only when useful. The active theme module is the sole source of all image-prompt prose.
+- Always generate manuscript-grounded cover artwork. Generate additional editorial images only when useful. The active theme template plus resolved theme colors are the sole sources of image-prompt prose and palette.
 - Treat short tail pages, sparse tools, and 4–6 item grids as deliberate compositions, not leftover blank space.
 - Use only the Photo and Minimal cover routes. Both must visibly integrate the required artwork; keep the selected route aligned with the final cover and evidence.
 

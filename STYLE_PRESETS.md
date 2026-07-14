@@ -73,7 +73,7 @@ Use `themes/colbalt/index.mjs` as the sole source for `imagePrompt.template`, cr
 
 ## Alumni Theme
 
-The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt uses sunlit pastel Mediterranean editorial photography with a restrained focal composition.
+The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt uses sunlit Mediterranean editorial photography with a restrained focal composition; runtime palette compilation supplies the selected colors.
 
 ## 1. Scholarly Marginalia
 

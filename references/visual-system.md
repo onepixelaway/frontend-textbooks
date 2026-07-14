@@ -28,7 +28,7 @@ Keep these pages additive and source-faithful: display copy is a bounded model-a
 
 ## Images
 
-Use manuscript-grounded prompts, deliberate crops, meaningful alt text, and adequate print resolution. Keep exact small text in HTML/SVG. The required cover bitmap must reach at least 150 effective DPI after the actual configured crop (8.5 × 7.45 inches with the default band); diagnostics report pixels, crop dimensions, and effective DPI. Never reuse cover art inside the book or repeat one divider image across parts, even under a copied filename.
+Use manuscript-grounded prompts, deliberate crops, meaningful alt text, and adequate print resolution. Keep exact small text in HTML/SVG. Use the compiled `palette.instruction` from `cover-image-request.json` for the cover and every additional illustration; change subjects, not the selected color system. The required cover bitmap must reach at least 150 effective DPI after the actual configured crop (8.5 × 7.45 inches with the default band); diagnostics report pixels, crop dimensions, and effective DPI. Never reuse cover art inside the book or repeat one divider image across parts, even under a copied filename.
 
 ## Cover gate
 
