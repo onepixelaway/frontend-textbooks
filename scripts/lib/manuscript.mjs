@@ -130,13 +130,23 @@ function sourceRecordFactory() {
 function partFields(title) {
   const separator = title.indexOf(":");
   if (separator === -1) {
+    const match = title.match(/^(Part\s+\S+)(\s+)(.+)$/iu);
+    if (match) {
+      return {
+        label: match[1],
+        labelSuffix: match[2],
+        title: match[3]
+      };
+    }
     return {
-      label: title.match(/^Part\s+\S+/iu)?.[0] ?? "Part",
+      label: "Part",
+      labelSuffix: " ",
       title: title.replace(/^Part\s+/iu, "") || title
     };
   }
   return {
     label: title.slice(0, separator).trim(),
+    labelSuffix: `${title.slice(0, separator + 1).match(/\s*:\s*$/u)?.[0] ?? ":"} `,
     title: title.slice(separator + 1).trim() || title
   };
 }
@@ -169,7 +179,7 @@ export function parseManuscript(source) {
   }
 
   function addChapter(title) {
-    const isIntroduction = /^Introduction\b/iu.test(title);
+    const isIntroduction = /^(?:Introduction|Opening)\b/iu.test(title);
     if (!isIntroduction) chapterCounter += 1;
     const chapterId = allocateStructuralId(title, `chapter-${String(chapters.length + 1).padStart(2, "0")}`);
     const sourceRecord = sourceRecords.create("chapter", title, {

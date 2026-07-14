@@ -11,6 +11,10 @@ import { resolveLocalAsset } from "./lib/local-assets.mjs";
 import { compilePlan } from "./lib/plan-compiler.mjs";
 import { acquirePipelineLock } from "./lib/pipeline-lock.mjs";
 import { serializeBookClientProgram } from "./lib/book-client-program.mjs";
+import { resolveBookPaths } from "./lib/book-paths.mjs";
+import { assertCoverGenerationReceiptFile, assertCoverImageRequestFile } from "./lib/cover-image-request.mjs";
+import { assertCoverAssetNotReused, inspectCoverBitmap, resolveRequiredCoverAsset } from "./lib/cover-assets.mjs";
+import { sha256 } from "./lib/content-hash.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(scriptDir, "..");
@@ -19,11 +23,11 @@ const LETTER_HEIGHT_IN = 11;
 const DEFAULT_COVER_BAND_HEIGHT_IN = 3.55;
 const BODY_COLUMN_CLASSES = ["text-two", "text-single", "text-three"];
 const COVER_ROUTES = Object.freeze([
-  { id: "type", label: "Type as image", decoration: () => "" },
+  { id: "type", label: "Type-led editorial", decoration: () => "" },
   { id: "symbol", label: "Conceptual symbol", decoration: () => '<div class="route-symbol-mark" aria-hidden="true"><span></span><span></span><span></span></div>' },
-  { id: "photo", label: "Editorial image route", decoration: () => '<div class="route-photo-image" aria-hidden="true"></div>' },
+  { id: "photo", label: "Editorial image route", decoration: () => "" },
   { id: "minimal", label: "High-contrast minimal", decoration: () => '<div class="route-minimal-mark" aria-hidden="true"></div>' },
-  { id: "press", label: "Press / series system", decoration: (book) => `<div class="route-press-mark" aria-hidden="true"></div><div class="route-press-series" aria-hidden="true">${escapeHtml(book.bookType)}</div>` }
+  { id: "press", label: "Press / series system", decoration: (book) => `<div class="route-press-series" aria-hidden="true">${escapeHtml(book.bookType)}</div>` }
 ]);
 const COVER_ROUTE_IDS = COVER_ROUTES.map((route) => route.id);
 
@@ -34,7 +38,7 @@ function numberInRange(value, fallback, min, max) {
 }
 
 function usage() {
-  console.error(`Usage: node scripts/build-html-book.mjs <book.json> <manuscript.md> [book-plan.json]
+  console.error(`Usage: node scripts/build-html-book.mjs <book.json> <manuscript.md> <book-plan.json>
 
 book.json fields:
   title        required
@@ -42,7 +46,7 @@ book.json fields:
   subtitle     optional
   outputDir    optional, default: directory containing book.json
   outputHtml   optional, default: index.html
-  coverImage   optional, path or URL as it should appear from outputHtml
+  coverImage   required local generated bitmap path, relative to outputDir
                with the default band, split-cover art slot is ${LETTER_WIDTH_IN}in x ${(LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN).toFixed(2)}in, aspect ${(LETTER_WIDTH_IN / (LETTER_HEIGHT_IN - DEFAULT_COVER_BAND_HEIGHT_IN)).toFixed(2)}:1
   coverBandHeight optional inches for the bottom cover band, default 3.55
   requirePartImages optional boolean; defaults to true when coverImage is set and the manuscript has parts
@@ -59,28 +63,33 @@ book.json fields:
 }
 
 const [configPathArg, manuscriptPathArg, planPathArg] = process.argv.slice(2);
-if (!configPathArg || !manuscriptPathArg) usage();
+if (!configPathArg || !manuscriptPathArg || !planPathArg) usage();
 
-const configPath = resolve(configPathArg);
-const manuscriptPath = resolve(manuscriptPathArg);
-const config = assertContract("book-config", JSON.parse(readFileSync(configPath, "utf8")));
-const planPath = planPathArg ? resolve(planPathArg) : null;
-const plan = planPath ? readContractFile("book-plan", planPath) : null;
+const requestedConfigPath = resolve(configPathArg);
+const manuscriptPath = realpathSync(resolve(manuscriptPathArg));
+const config = assertContract("book-config", JSON.parse(readFileSync(requestedConfigPath, "utf8")));
+const resolvedPaths = resolveBookPaths({ configPath: requestedConfigPath, config, forbiddenRoots: [skillDir] });
+const configPath = resolvedPaths.configPath;
+const planPath = realpathSync(resolve(planPathArg));
+const plan = readContractFile("book-plan", planPath);
 const manuscript = readFileSync(manuscriptPath, "utf8");
-const outputDir = resolve(config.outputDir ?? dirname(configPath));
-const outputHtml = config.outputHtml ?? "index.html";
+const outputDir = resolvedPaths.outputDir;
+const outputHtml = basename(resolvedPaths.outputHtml);
 if (typeof outputHtml !== "string" || basename(outputHtml) !== outputHtml) {
   throw new Error("outputHtml must be a single filename inside outputDir; nested paths are not supported.");
 }
 if (![".html", ".htm"].includes(extname(outputHtml).toLowerCase())) {
   throw new Error("outputHtml must use an .html or .htm extension.");
 }
-const outputPath = resolve(outputDir, outputHtml);
+const outputPath = resolvedPaths.outputHtml;
 const coverOptionsPath = resolve(outputDir, "cover-options.html");
 const buildManifestPath = resolve(outputDir, "book-build-manifest.json");
 const buildSummaryPath = resolve(outputDir, "book-build-summary.json");
 const sourceInventoryPath = resolve(outputDir, "source-inventory.json");
 const planReceiptPath = resolve(outputDir, "book-plan-receipt.json");
+const coverRequestPath = resolve(outputDir, "cover-image-request.json");
+const coverGenerationReceiptPath = resolve(outputDir, "cover-generation-receipt.json");
+const coverReceiptPath = resolve(outputDir, "cover-image-receipt.json");
 const baseCss = readFileSync(resolve(skillDir, "page-base.css"), "utf8");
 
 const generatedPaths = new Map([
@@ -89,10 +98,11 @@ const generatedPaths = new Map([
   [buildManifestPath, "build manifest"],
   [buildSummaryPath, "build summary"],
   [sourceInventoryPath, "source inventory"],
-  [planReceiptPath, "plan receipt"]
+  [planReceiptPath, "plan receipt"],
+  [coverReceiptPath, "cover image receipt"]
 ]);
-if (generatedPaths.size !== 6) throw new Error("outputHtml collides with a reserved generated filename.");
-for (const [inputPath, label] of [[configPath, "configuration"], [manuscriptPath, "manuscript"]]) {
+if (generatedPaths.size !== 7) throw new Error("outputHtml collides with a reserved generated filename.");
+for (const [inputPath, label] of [[configPath, "configuration"], [manuscriptPath, "manuscript"], [planPath, "plan"]]) {
   if (generatedPaths.has(inputPath)) {
     throw new Error(`${generatedPaths.get(inputPath)} collides with the ${label} input: ${inputPath}`);
   }
@@ -239,12 +249,29 @@ const configMaps = {
 const parsed = parseManuscript(manuscript);
 if (!parsed.chapters.length) throw new Error("No chapters found in manuscript.");
 
-if (plan) {
-  assertPlanMatchesManuscript(plan, parsed, STYLE_NAMES);
-  assertPlanPolicy(plan, config, parsed);
-}
+assertPlanMatchesManuscript(plan, parsed, STYLE_NAMES);
+assertPlanPolicy(plan, config, parsed);
+
+const expectedCoverRequest = assertCoverImageRequestFile(coverRequestPath, { config, plan, outputDir });
+const coverAssetPath = resolveRequiredCoverAsset(config.coverImage, outputDir);
+const coverAssetReport = inspectCoverBitmap(coverAssetPath, {
+  frame: expectedCoverRequest.constraints.frame,
+  minimumDpi: expectedCoverRequest.constraints.minimumDpi
+});
+const coverAssetHash = coverAssetReport.sha256;
+const coverGenerationReceipt = assertCoverGenerationReceiptFile(coverGenerationReceiptPath, { config, plan, outputDir }, { assetPath: coverAssetPath, report: coverAssetReport });
+assertCoverAssetNotReused({
+  coverPath: coverAssetPath,
+  coverReport: coverAssetReport,
+  outputDir,
+  assets: [
+    ...Object.entries(config.partImages ?? {}).map(([scope, value]) => ({ label: `partImages.${scope}`, value })),
+    ...parsed.assetReferences.map((value, index) => ({ label: `manuscript image ${index + 1}`, value }))
+  ]
+});
 
 const coverImage = trimmedText(config.coverImage);
+const coverDecision = plan.visuals.cover;
 const book = {
   title: plainText(config.title),
   subtitle: plainText(config.subtitle ?? ""),
@@ -252,14 +279,18 @@ const book = {
   bookType: plainText(config.bookType ?? "Book"),
   coverKicker: plainText(config.coverKicker ?? "A book"),
   coverImage,
+  coverAltText: coverDecision.altText,
+  coverSubject: coverDecision.subject,
+  coverFocalPoint: coverDecision.focalPoint,
+  coverRequestHash: expectedCoverRequest.requestHash,
   coverBandHeight: numberInRange(config.coverBandHeight, DEFAULT_COVER_BAND_HEIGHT_IN, 2.8, 4.4),
   requirePartImages: hasPlanException(plan, "waive-part-images") ? false : booleanValue(config.requirePartImages, "requirePartImages", Boolean(coverImage && parsed.parts.length)),
   requireDiagrams: hasPlanException(plan, "waive-diagrams") ? false : booleanValue(config.requireDiagrams, "requireDiagrams", defaultRequireDiagrams(config)),
-  chapterOpeners: plan?.layout.chapterOpeners ?? booleanValue(config.chapterOpeners, "chapterOpeners", false),
-  style: plan?.theme.id ?? enumValue(config.style, "style", STYLE_NAMES, DEFAULT_THEME_NAME),
+  chapterOpeners: plan.layout.chapterOpeners,
+  style: plan.theme.id,
   themeOverrides: config.themeOverrides ?? {},
-  selectedCoverRoute: enumValue(config.selectedCoverRoute, "selectedCoverRoute", COVER_ROUTE_IDS, "photo"),
-  bodyColumns: plan?.layout.bodyColumns ?? enumValue(config.bodyColumns, "bodyColumns", BODY_COLUMN_CLASSES, "text-two"),
+  selectedCoverRoute: plan.layout.coverRoute,
+  bodyColumns: plan.layout.bodyColumns,
   fontMode: config.fontMode ?? "system"
 };
 
@@ -340,7 +371,7 @@ parsed.parts.forEach((part, index) => {
 assertCompletePartImages(parsed.parts, hasMapEntries(configMaps.partImages), book.requirePartImages);
 assertUniquePartImages(parsed.parts);
 assertPartImagesDoNotReuseCover(parsed.parts, book.coverImage);
-const compiledPlan = compilePlan(plan, parsed, book);
+const compiledPlan = compilePlan(plan, parsed, book, { ...coverAssetReport, sha256: coverAssetHash });
 const partNumbers = new Map(parsed.parts.map((part, index) => [part.id, index + 1]));
 
 for (const chapter of parsed.chapters) {
@@ -415,6 +446,7 @@ body { font-size: 10.7pt; }
 .cover-author { margin-top: 0.3in; font-family: var(--font-ui); font-size: 8pt; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; color: #fff; }
 .title-grid { display: grid; grid-template-rows: auto 1fr auto; }
 .title-grid h1 { align-self: end; max-width: 6in; font-size: 56pt; }
+.title-page.has-unbreakable-title h1 { overflow-wrap: anywhere; word-break: break-word; hyphens: none; }
 .title-subtitle { max-width: 5.6in; font-family: var(--font-ui); font-size: 14pt; line-height: 1.38; color: var(--deck-ink); }
 .title-author { font-family: var(--font-ui); color: var(--muted-ink); }
 .toc-list { list-style: none; margin: 0.42in 0 0; padding: 0; font-family: var(--font-ui); }
@@ -451,47 +483,86 @@ body { font-size: 10.7pt; }
 .tail-quote { margin: 0; max-width: 5.1in; font-family: var(--font-display); font-size: 16pt; line-height: 1.24; color: var(--heading-ink); text-indent: 0; }
 .planned-callout, .planned-definition { padding: 0.16in 0.18in; border-left: 0.06in solid var(--accent); background: var(--callout-bg); break-inside: avoid; }
 .planned-diagram { padding: 0.18in; border: 1px solid var(--rule); border-radius: 0.06in; background: var(--callout-bg); break-inside: avoid; }
-.diagram-flow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.1in; align-items: stretch; margin-top: 0.1in; }
-.diagram-node { display: grid; place-items: center; min-height: 0.62in; padding: 0.1in; border: 1px solid var(--rule); background: var(--page-bg); text-align: center; }
-.diagram-connector { align-self: center; font: 900 14pt/1 var(--font-ui); color: var(--accent); }
+.diagram-heading { display: grid; gap: 0.04in; }
+.diagram-heading p { margin: 0; }
+.diagram-caption { font-size: 8.8pt; line-height: 1.35; color: var(--muted-ink); }
+.diagram-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(1.05in, 1fr)); gap: 0.1in; align-items: stretch; margin-top: 0.12in; }
+.diagram-layout-comparison, .diagram-layout-matrix { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.diagram-layout-hierarchy .diagram-node:first-child, .diagram-layout-taxonomy .diagram-node:first-child { grid-column: 1 / -1; justify-self: center; width: min(2.2in, 100%); }
+.diagram-node { display: grid; place-items: center; align-content: center; gap: 0.04in; min-height: 0.62in; padding: 0.1in; border: 1px solid var(--rule); background: var(--page-bg); text-align: center; }
+.diagram-node-label { font: 800 8.6pt/1.2 var(--font-ui); color: var(--heading-ink); }
+.diagram-node-detail { font-size: 8pt; line-height: 1.28; color: var(--muted-ink); }
+.diagram-relationships { display: grid; grid-template-columns: repeat(auto-fit, minmax(1.5in, 1fr)); gap: 0.06in 0.16in; margin: 0.12in 0 0; padding: 0.1in 0 0 0.18in; border-top: 1px solid var(--rule); font-size: 7.8pt; line-height: 1.25; }
+.diagram-relationships[hidden] { display: none; }
+.diagram-takeaway { margin-top: 0.12in; padding-top: 0.1in; border-top: 2px solid var(--accent); font-weight: 700; color: var(--heading-ink); }
 .planned-table, .planned-checklist { padding: 0.12in 0.16in; border-top: 2px solid var(--accent); border-bottom: 1px solid var(--rule); break-inside: avoid; }
 .planned-quote { padding-left: 0.2in; border-left: 0.04in solid var(--accent); font-family: var(--font-display); font-size: 12pt; font-style: italic; }
-.option-cover .page-inner { position: relative; z-index: 2; display: grid; grid-template-rows: auto 1fr auto auto; padding: 0.7in; }
-.option-cover h1 { align-self: end; min-width: 0; max-width: 6.4in; overflow-wrap: anywhere; font-size: 70pt; line-height: 0.9; }
-.cover.option-cover h1 { font-size: 44pt; }
+.option-cover { position: relative; overflow: hidden; background: var(--cover-band); }
+.cover-art-frame { position: absolute; inset: 0 0 auto; height: var(--cover-art-height); margin: 0; overflow: hidden; background: var(--soft-accent); }
+.cover-art { display: block; width: 100%; height: 100%; object-fit: cover; object-position: calc(var(--cover-focal-x) * 1%) calc(var(--cover-focal-y) * 1%); }
+.option-cover .page-inner { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: var(--cover-band-height); min-height: var(--cover-band-height); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr auto auto; align-content: center; padding: 0.46in 0.62in 0.52in; background: var(--cover-band); }
+.option-cover h1 { align-self: end; min-width: 0; max-width: 6.15in; overflow-wrap: normal; word-break: normal; hyphens: none; font-size: 44pt; line-height: 0.92; }
+.option-cover.title-long h1 { font-size: 34pt; line-height: 0.96; }
+.option-cover.title-very-long h1 { font-size: 27pt; line-height: 1; }
+.option-cover.has-unbreakable-title h1 { overflow-wrap: anywhere; word-break: break-word; }
+.option-cover.has-unbreakable-title.title-short h1 { font-size: 30pt; }
+.option-cover.has-unbreakable-title.title-long h1 { font-size: 29pt; }
+.option-cover.has-unbreakable-title.title-very-long h1 { font-size: 23pt; }
+.cover.option-cover h1 { font-size: 40pt; }
+.cover.option-cover.title-long h1 { font-size: 30pt; }
+.cover.option-cover.title-very-long h1 { font-size: 21pt; }
+.cover.option-cover.has-unbreakable-title.title-short h1 { font-size: 28pt; }
+.cover.option-cover.has-unbreakable-title.title-long h1 { font-size: 26pt; }
+.cover.option-cover.has-unbreakable-title.title-very-long h1 { font-size: 20pt; }
 .option-subtitle, .option-author, .cover-route-label { font-family: var(--font-ui); }
-.route-type { background: var(--ink); color: #fff; }
+.route-type .page-inner { background: var(--ink); color: #fff; }
 .route-type h1, .route-type p { color: #fff; }
-.route-symbol-mark { position: absolute; inset: 0.8in; display: grid; grid-template-columns: 1fr 0.32in 1fr; gap: 0.18in; }
+.route-symbol .page-inner { padding-right: 1.72in; background: var(--page-bg); color: var(--ink); }
+.route-symbol-mark { position: absolute; z-index: 3; right: 0.54in; bottom: 0.54in; width: 0.88in; height: calc(var(--cover-band-height) - 1.08in); display: grid; grid-template-columns: 1fr 0.15in 1fr; gap: 0.08in; }
 .route-symbol-mark span { border: 2px solid var(--ink); }
 .route-symbol-mark span:nth-child(2) { background: var(--accent); border-color: var(--accent); }
-.route-photo { color: #fff; background: var(--cover-band, var(--heading-ink)); }
-.route-photo .page-inner { position: absolute; left: 0; right: 0; bottom: 0; height: var(--cover-band-height); min-height: var(--cover-band-height); background: var(--cover-band, var(--heading-ink)); color: #fff; }
+.route-photo .page-inner { background: var(--cover-band, var(--heading-ink)); color: #fff; }
 .route-photo h1, .route-photo p { color: #fff; }
-.route-photo-image { position: absolute; inset: 0 0 var(--cover-band-height) 0; background: ${book.coverImage ? `${cssUrl(book.coverImage)} center/cover no-repeat` : "linear-gradient(135deg, var(--page-bg), var(--soft-accent))"}; }
-.route-minimal-mark { position: absolute; right: 0.7in; top: 0.7in; width: 1.1in; height: 7.7in; background: var(--accent); }
+.route-minimal .page-inner { padding-right: 1.55in; background: var(--page-bg); color: var(--ink); }
+.route-minimal-mark { position: absolute; z-index: 3; right: 0.62in; bottom: 0.58in; width: 0.72in; height: calc(var(--cover-band-height) - 1.16in); background: var(--accent); }
 .route-press { background: var(--page-bg); }
-.route-press .page-inner { margin: 0.32in; min-height: calc(11in - 0.64in); height: calc(11in - 0.64in); border: 0.12in solid var(--cover-band); padding: 0.58in; }
-.route-press-mark { position: absolute; left: 0.32in; right: 0.32in; top: 1.42in; height: 0.2in; background: repeating-linear-gradient(90deg, var(--cover-band) 0 0.45in, transparent 0.45in 0.58in); }
-.route-press-series { position: absolute; right: 0.58in; top: 0.58in; font: 900 8pt/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase; color: var(--cover-band); }
+.route-press .cover-art-frame { inset: 0.26in 0.26in auto; width: auto; height: calc(var(--cover-art-height) - 0.26in); border: 0.08in solid var(--cover-band); }
+.route-press .page-inner { height: var(--cover-band-height); border: 0.08in solid var(--cover-band); border-top: 0; padding: 0.42in 0.58in 0.46in; background: var(--page-bg); color: var(--ink); }
+.route-press-mark { position: absolute; z-index: 3; left: 0.24in; right: 0.24in; bottom: 0; height: 0.14in; background: repeating-linear-gradient(90deg, var(--cover-band) 0 0.45in, transparent 0.45in 0.58in); }
+.route-press-series { position: absolute; z-index: 3; right: 0.62in; bottom: 0.52in; font: 900 8pt/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase; color: var(--cover-band); }
 .route-symbol .cover-kicker, .route-minimal .cover-kicker, .route-press .cover-kicker { color: var(--label-ink); }
 @media screen and (max-width: 920px) {
   .book { gap: 0; }
   .page { margin-bottom: 18px; }
   .text-page { margin-bottom: 0; }
-  .cover .page-inner, .route-photo .page-inner { position: relative; inset: auto; width: 100%; height: auto; min-height: 0; }
-  .route-press .page-inner { width: 92%; height: auto; min-height: 0; margin: 4%; }
+  .option-cover .cover-art-frame { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: var(--cover-art-aspect); }
+  .option-cover .page-inner { position: relative; inset: auto; width: 100%; height: auto; min-height: 42vw; padding: 7.5vw; }
+  .route-press .cover-art-frame { width: 92%; margin: 4% 4% 0; border-width: 5px; }
+  .route-press .page-inner { width: 92%; margin: 0 4% 4%; border-width: 5px; border-top: 0; }
   .part-divider.has-part-image .page-inner { height: auto; min-height: 0; grid-template-rows: auto auto; }
-  .cover-image, .route-photo-image, .part-image-frame { position: relative; display: block; min-height: 72vw; inset: auto; }
-  .cover-title, .title-grid h1, .part-divider h1, .chapter-title, .option-cover h1 { font-size: 38pt; }
-  .diagram-flow { grid-template-columns: 1fr; }
-  .diagram-connector { justify-self: center; transform: rotate(90deg); }
+  .cover-image, .part-image-frame { position: relative; display: block; min-height: 72vw; inset: auto; }
+  .cover-title, .part-divider h1, .chapter-title { font-size: 38pt; }
+  .title-grid h1 { font-size: 34pt; }
+  .title-grid > *, .title-grid h1 { min-width: 0; max-width: 100%; }
+  .option-cover h1, .cover.option-cover h1 { font-size: 34pt; }
+  .option-cover.title-long h1, .cover.option-cover.title-long h1 { font-size: 21pt; line-height: 1; }
+  .option-cover.title-very-long h1, .cover.option-cover.title-very-long h1 { font-size: 18pt; line-height: 1.04; }
+  .option-cover.has-unbreakable-title.title-short h1, .cover.option-cover.has-unbreakable-title.title-short h1 { font-size: 25pt; }
+  .option-cover.has-unbreakable-title.title-long h1, .cover.option-cover.has-unbreakable-title.title-long h1 { font-size: 19pt; }
+  .option-cover.has-unbreakable-title.title-very-long h1, .cover.option-cover.has-unbreakable-title.title-very-long h1 { font-size: 17pt; }
+  .route-symbol .page-inner, .route-minimal .page-inner { padding-right: 26%; }
+  .route-symbol-mark { right: 7%; bottom: 7%; width: 13%; height: 28%; }
+  .route-minimal-mark { top: auto; right: 8.5%; bottom: 8.5%; width: 10%; height: 30%; }
+  .route-press-mark { left: 5%; right: 5%; bottom: 0; }
+  .route-press-series { right: 9%; bottom: 9%; }
+  .diagram-flow, .diagram-layout-comparison, .diagram-layout-matrix { grid-template-columns: 1fr; }
 }`;
 }
 
 function renderTitlePage() {
+  const titleClass = book.title.split(/\s+/u).some((token) => token.length > 24) ? " has-unbreakable-title" : "";
   return `
-<section class="page title-page" id="title-page" aria-label="Title page">
+<section class="page title-page${titleClass}" id="title-page" aria-label="Title page">
   <div class="page-inner title-grid">
     <p class="chapter-kicker no-indent">${escapeHtml(book.bookType)}</p>
     <div>
@@ -512,7 +583,7 @@ function renderToc(chapters) {
     <ol class="toc-list">
       ${chapters.map((chapter) => `
       <li>
-        <span>${chapter.number === "Introduction" ? "Introduction" : `Chapter ${chapter.number}`}</span>
+        <span>${["Introduction", "Opening"].includes(chapter.number) ? "Introduction" : `Chapter ${chapter.number}`}</span>
         <span>${escapeHtml(chapter.title.replace(/^Introduction:\s*/, ""))}</span>
         <span data-toc-page-for="${chapter.id}"></span>
       </li>`).join("")}
@@ -523,7 +594,7 @@ function renderToc(chapters) {
 
 function renderPartCopy(part, index) {
   return `
-    <p class="part-label no-indent">${escapeHtml(part.label)}</p>
+    <p class="part-label no-indent">${escapeHtml(`${part.label}${part.labelSuffix ?? " "}`)}</p>
     <h1>${escapeHtml(part.title)}</h1>
     <div class="part-number">${String(index).padStart(2, "0")}</div>`;
 }
@@ -534,7 +605,7 @@ function renderPartDivider(part, index) {
 <section class="page part-divider has-part-image" id="${part.id}" data-source-block-id="${escapeHtml(part.sourceBlockId)}" aria-label="${escapeHtml(part.label)}">
   <div class="page-inner">
     <figure class="part-image-frame">
-      <img src="${escapeHtml(part.image)}" alt="${escapeHtml(`Editorial image for ${part.title}`)}">
+      <img src="${escapeHtml(part.image)}" alt="${escapeHtml(part.imageAlt || `Editorial image for ${part.title}`)}">
     </figure>
     <div class="part-divider-copy">
       ${renderPartCopy(part, index)}
@@ -554,7 +625,7 @@ function renderChapterOpener(chapter) {
   return `
 <section class="page chapter-opener" id="${chapter.id}-opener" data-allow-opening-spread="true" aria-label="${escapeHtml(chapter.title)} opener">
   <div class="page-inner">
-    <p class="chapter-kicker no-indent">${chapter.number === "Introduction" ? "Introduction" : `Chapter ${chapter.number}`}</p>
+    <p class="chapter-kicker no-indent">${["Introduction", "Opening"].includes(chapter.number) ? "Introduction" : `Chapter ${chapter.number}`}</p>
     <h1 class="chapter-title">${escapeHtml(chapter.title)}</h1>
     <p class="chapter-summary no-indent">${escapeHtml(excerpt(chapter, 44))}</p>
     <div class="opener-axis" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
@@ -570,14 +641,22 @@ function renderCoverRouteCopy(label, final = false) {
           <p class="option-author no-indent">by ${escapeHtml(book.author)}</p>`;
 }
 
+function renderCoverArt(route) {
+  const pressMark = route.id === "press" ? '<div class="route-press-mark" aria-hidden="true"></div>' : "";
+  return `<figure class="cover-art-frame"><img class="cover-art" src="${escapeHtml(book.coverImage)}" alt="${escapeHtml(book.coverAltText)}" style="--cover-focal-x:${book.coverFocalPoint.x};--cover-focal-y:${book.coverFocalPoint.y}">${pressMark}</figure>`;
+}
+
 function renderCoverRoute(route, { final = false } = {}) {
   if (!route) throw new Error(`Unsupported cover route: ${book.selectedCoverRoute}`);
   const routeClass = `route-${route.id}`;
-  const classes = ["page", "option-cover", ...(final ? ["cover"] : []), routeClass].join(" ");
+  const hasUnbreakableTitle = book.title.split(/\s+/u).some((token) => token.length > 24);
+  const titleLengthClass = book.title.length > 82 ? "title-very-long" : (book.title.length > 46 ? "title-long" : "title-short");
+  const classes = ["page", "option-cover", "has-cover-art", titleLengthClass, ...(final ? ["cover"] : []), ...(hasUnbreakableTitle ? ["has-unbreakable-title"] : []), routeClass].join(" ");
   const decoration = route.decoration(book);
-  const label = route.id === "photo" && book.coverImage ? `${route.label} / candidate` : route.label;
+  const label = route.label;
   return `
-      <section class="${classes}"${final ? ' id="cover" aria-label="Cover"' : ""} data-cover-route="${route.id}">
+      <section class="${classes}"${final ? ' id="cover" aria-label="Cover"' : ""} data-cover-route="${route.id}" data-cover-asset="${escapeHtml(book.coverImage)}" data-cover-request-hash="${book.coverRequestHash}">
+        ${renderCoverArt(route)}
         ${decoration}
         <div class="page-inner">
           ${renderCoverRouteCopy(label, final)}
@@ -670,10 +749,27 @@ const allowlistedFiles = [...new Set(manifestFiles)];
 writeFileSync(outputPath, renderBook());
 writeFileSync(coverOptionsPath, renderCoverOptions());
 writeFileSync(buildManifestPath, JSON.stringify({
-  schemaVersion: 1,
+  schemaVersion: 2,
   entry: manifestEntry,
   coverOptions: manifestCoverOptions,
   files: allowlistedFiles,
+  cover: {
+    asset: coverAsset,
+    sha256: coverAssetHash,
+    requestHash: expectedCoverRequest.requestHash,
+    generationReceiptHash: sha256(coverGenerationReceipt),
+    generationId: coverDecision.generationId,
+    route: book.selectedCoverRoute,
+    subject: book.coverSubject,
+    altText: book.coverAltText,
+    focalPoint: book.coverFocalPoint,
+    format: coverAssetReport.format,
+    width: coverAssetReport.width,
+    height: coverAssetReport.height,
+    frame: coverAssetReport.frame,
+    effectiveDpi: coverAssetReport.effectiveDpi,
+    minimumDpi: coverAssetReport.minimumDpi
+  },
   source: {
     sha256: parsed.sourceManifest.sha256,
     wordCount: parsed.sourceManifest.totalWords,
@@ -687,10 +783,34 @@ writeFileSync(buildSummaryPath, JSON.stringify({
   chapters: parsed.chapters.length,
   parts: parsed.parts.length,
   sourceWords: wordCount(manuscript),
-  outputHtml: relative(process.cwd(), outputPath)
+  outputHtml: relative(outputDir, outputPath),
+  cover: {
+    asset: coverAsset,
+    route: book.selectedCoverRoute,
+    width: coverAssetReport.width,
+    height: coverAssetReport.height,
+    frame: coverAssetReport.frame,
+    effectiveDpi: coverAssetReport.effectiveDpi,
+    minimumDpi: coverAssetReport.minimumDpi
+  }
 }, null, 2));
 writeFileSync(sourceInventoryPath, JSON.stringify(createSourceInventory(parsed), null, 2));
 writeFileSync(planReceiptPath, JSON.stringify(compiledPlan.receipt, null, 2));
+writeFileSync(coverReceiptPath, JSON.stringify({
+  schemaVersion: 1,
+  requestHash: expectedCoverRequest.requestHash,
+  generationReceiptHash: sha256(coverGenerationReceipt),
+  manuscriptHash: plan.manuscriptHash,
+  generationId: coverDecision.generationId,
+  asset: coverAsset,
+  sha256: coverAssetHash,
+  format: coverAssetReport.format,
+  width: coverAssetReport.width,
+  height: coverAssetReport.height,
+  frame: coverAssetReport.frame,
+  effectiveDpi: coverAssetReport.effectiveDpi,
+  minimumDpi: coverAssetReport.minimumDpi
+}, null, 2));
 
 console.log(JSON.stringify({
   html: outputPath,
@@ -699,6 +819,9 @@ console.log(JSON.stringify({
   summary: buildSummaryPath,
   sourceInventory: sourceInventoryPath,
   planReceipt: planReceiptPath,
+  coverRequest: coverRequestPath,
+  coverGenerationReceipt: coverGenerationReceiptPath,
+  coverReceipt: coverReceiptPath,
   sourceWords: wordCount(manuscript),
   chapters: parsed.chapters.length,
   parts: parsed.parts.length

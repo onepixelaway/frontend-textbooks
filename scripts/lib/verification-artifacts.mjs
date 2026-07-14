@@ -5,7 +5,7 @@ import { createRepairTasks, normalizeDiagnostics } from "./diagnostics.mjs";
 
 export function cleanVerificationOutput(outputDir) {
   mkdirSync(outputDir, { recursive: true });
-  const ownedOutput = /^(?:desktop|mobile)-(?:viewport|cover|text-(?:first|last)|feature-\d+|page-\d+)\.png$|^mobile-part-\d+\.png$|^contact-sheet(?:-\d+)?\.png$|^(?:render-report|diagnostics|repair-tasks|source-accounting|pdf-report|aesthetic-review|aesthetic-review-request)\.json$/;
+  const ownedOutput = /^(?:desktop|mobile)-(?:viewport|cover|late-text|text-(?:first|last)|feature-\d+|page-\d+)\.png$|^mobile-part-\d+\.png$|^contact-sheet(?:-\d+)?\.png$|^(?:render-report|diagnostics|repair-tasks|source-accounting|pdf-report|aesthetic-review|aesthetic-review-request)\.json$/;
   for (const name of readdirSync(outputDir)) {
     if (ownedOutput.test(name)) rmSync(join(outputDir, name), { force: true });
   }

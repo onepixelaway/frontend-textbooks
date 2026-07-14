@@ -6,6 +6,7 @@ Use this template as a starting point, not a literal requirement. The important 
 
 - Letter page print rules
 - Preserved manuscript prose
+- One original manuscript-grounded local bitmap visibly used by the selected cover route
 - Measured `.page.text-page` body pagination for designed prose books
 - Semantic figures, diagrams, tables, and captions
 - HTML and PDF produced from the same source file
@@ -17,11 +18,12 @@ book-title/
   index.html
   book-title.pdf
   assets/
+    cover.png
     chapter-01-opener.png
     figure-03-system-map.svg
 ```
 
-For a single-file book with no external images, `[book-title].html` next to `[book-title].pdf` is fine.
+The HTML and PDF may sit together, but every completed book also has at least the required local cover bitmap and its generation/request receipts.
 
 ## Base HTML
 
@@ -95,6 +97,13 @@ For a single-file book with no external images, `[book-title].html` next to `[bo
       position: absolute;
       inset: 0 0 var(--cover-band-height);
       background: var(--page-bg);
+    }
+
+    .cover-image-field img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: var(--cover-focal-x, 50%) var(--cover-focal-y, 50%);
     }
 
     .cover-title {
@@ -179,7 +188,9 @@ For a single-file book with no external images, `[book-title].html` next to `[bo
   <main class="book-shell">
     <article class="book" id="book">
       <section class="page cover" aria-label="Cover">
-        <div class="cover-image-field" aria-hidden="true"></div>
+        <figure class="cover-image-field">
+          <img src="assets/cover.png" alt="Meaningful description derived from the cover visual brief">
+        </figure>
         <div class="page-inner">
           <p class="eyebrow no-indent">Textbook</p>
           <h1 class="cover-title">Book Title From Manuscript</h1>
@@ -376,7 +387,7 @@ For field tools, canvases, or frameworks with 4-6 items and only a sentence or t
 
 Do not add visible continuation labels such as `continued`, `text`, or `<span class="continuation-mark">...</span>` to repeated text-page titles. Use the same title, a quieter running header, or an `aria-label` for continuation semantics; the visible page should never show a stray continuation word beside the title.
 
-Cover art is not an interior plate by default. Do not add a standalone frontispiece/opening plate that simply repeats the cover image after the table of contents. If the book needs an opening plate, generate or place a distinct manuscript-grounded asset for that page.
+Cover art is never an interior plate. Do not add a standalone frontispiece/opening plate that repeats the cover image after the table of contents. If the book needs an opening plate, generate or place a distinct manuscript-grounded asset for that page.
 
 Every major part or section divider should have its own generated or supplied image asset unless the user explicitly requested a plain/no-image edition or image generation is unavailable. Use the same split format as the default cover when using the default style: upper artwork field, solid cobalt text band, matching aspect ratio, and a distinct section-grounded subject.
 
@@ -832,15 +843,15 @@ Do not force a 30,000-word manuscript into manually designed fixed pages unless 
 
 ## Cover Options Pattern
 
-For every completed book, create a lightweight `cover-options.html` (or equivalent section) as the pre-final cover review step. Use actual title, subtitle, author, and optional publisher/imprint. For editorial, HBR-like, coffee-table, business, brand, or visually led books, render 4-5 distinct routes, not minor variations; for deliberately plain conversions, still render at least 3 routes unless the user explicitly opts out.
+For every completed book, create `cover-options.html` as the pre-final cover review step. Use the exact required bitmap plus actual title, subtitle, author, and optional supplied publisher/imprint. Render all five distinct routes, not minor variations. There is no plain/type-only opt-out.
 
 Recommended routes:
 
-- `cover-route-type`: oversized title typography as the primary image.
-- `cover-route-symbol`: conceptual mark or abstract system/threshold/fork as the primary image.
-- `cover-route-photo`: editorial image with type integrated into the composition.
-- `cover-route-minimal`: high-contrast 2-3 color cover with generous negative space.
-- `cover-route-press`: disciplined imprint/series-style cover with one memorable focal hook.
+- `cover-route-type`: oversized title typography paired with a substantial artwork field.
+- `cover-route-symbol`: conceptual mark layered with or adjacent to meaningful artwork.
+- `cover-route-photo`: the artwork leads, with HTML type integrated into the composition.
+- `cover-route-minimal`: high-contrast restrained type and a deliberately cropped artwork field with generous negative space.
+- `cover-route-press`: disciplined imprint/series typography plus one memorable artwork crop.
 
 Thumbnail test:
 
@@ -852,7 +863,7 @@ async function captureCoverThumbnail(page, selector, path) {
 }
 ```
 
-Final-cover rule: choose the route with the clearest hierarchy and strongest market signal. Then make the final cover match that selected route's composition, scale, image crop, author placement, and negative space. If the final cover gains extra marks or moves elements, update the selected route too; the option is a contract, not a disposable sketch. A beautiful interior does not rescue a timid cover.
+Final-cover rule: choose the route with the clearest hierarchy and strongest market signal. Then make the final cover use the same hashed bitmap and match that selected route's composition, scale, image crop/focal point, author placement, and negative space. Verify full Letter, contact-sheet thumbnail, and 390px mobile evidence. If the final cover gains extra marks or moves elements, update the selected route too; the option is a contract, not a disposable sketch. A beautiful interior does not rescue a timid cover.
 
 ## Figure Pattern
 

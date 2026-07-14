@@ -67,13 +67,13 @@ Use `themes/colbalt/index.mjs` as the sole source for `imagePrompt.template`, cr
 - Poppins Bold headlines with generous leading and no negative letter spacing
 - Halant body text in measured columns or a narrow single-column measure
 - Warm paper, cobalt editorial hierarchy, muted metadata, and lighter cobalt-blue accents that keep pages from becoming monochrome
-- Default cover composition: generated/supplied image in the upper field, with title, subtitle, and author in a solid cobalt bottom band; generate cover artwork for the upper field's roughly `1.14:1` aspect ratio and avoid dark overlays that obscure the artwork
+- Default cover composition: the required newly generated manuscript-grounded bitmap in the upper field, with title, subtitle, and author in a solid cobalt bottom band; target the upper field's roughly `1.14:1` aspect ratio and avoid dark overlays that obscure the artwork
 - Cover-options sprint for all finished books, with the selected route matched in the final cover
 - Designed body pages, chapter openers, diagrams, and tool pages when the manuscript supports them
 
 ## Alumni Theme
 
-The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt shifts the artwork darker and more cinematic, with amber chiaroscuro, espresso shadows, and restrained editorial photography.
+The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt uses sunlit pastel Mediterranean editorial photography with a restrained focal composition.
 
 ## 1. Scholarly Marginalia
 
@@ -306,8 +306,8 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 
 **Signature elements**
 
-- Generated editorial plates for major part dividers, but do not rely on a polite photo split for the cover. The cover should be either bold type-led, concept-led, or an image/type integration with a clear focal hook.
-- Cover sprint required: create 4-5 routes, including at least one oversized typographic route, one conceptual-symbol route, one full-bleed editorial image route, and one restrained press/imprint route.
+- Generated editorial plates for major part dividers. Every cover route must visibly integrate the required bitmap; type-led and concept-led routes still use the art as a meaningful compositional field rather than an incidental sliver.
+- Cover sprint required: create all five routes, varying the relationship between the same required art, typography, concept marks, full-bleed treatment, and restrained press/imprint system.
 - Cover typography should feel like a designed object: extreme scale, condensed sans, expressive serif, mixed weight, or deliberate tracking. Avoid default Georgia/Times cover titles unless heavily customized.
 - The title must read at thumbnail size. Test the chosen cover at around 100px wide before finalizing.
 - Treat the selected route as the final-cover blueprint. The exported PDF cover should not gain unrelated middle marks, altered scale, or a different image crop after route selection.

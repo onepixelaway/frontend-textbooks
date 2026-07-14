@@ -2,13 +2,13 @@
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertContract } from "./lib/json-contracts.mjs";
 import { sha256 } from "./lib/content-hash.mjs";
 import { parseManuscript } from "./lib/manuscript.mjs";
 import { STYLE_NAMES } from "../themes/index.mjs";
-import { assertPlanMatchesManuscript, assertPlanPolicy } from "./lib/plan-contract.mjs";
+import { assertPlanMatchesManuscript, assertPlanPolicy, resolvedPlanFacts } from "./lib/plan-contract.mjs";
 import { createSourceInventory } from "./lib/source-inventory.mjs";
 import { getTheme } from "../themes/index.mjs";
 import { resolveLocalAsset } from "./lib/local-assets.mjs";
@@ -16,6 +16,10 @@ import { contactSheetEvidence } from "./lib/aesthetic-review.mjs";
 import { PIPELINE_MODES, TIER_RANK } from "./lib/verification-profiles.mjs";
 import { acquirePipelineLock } from "./lib/pipeline-lock.mjs";
 import { runNodeScript } from "./lib/process-runner.mjs";
+import { isWithinPath, portableRelativePath as relativePath, resolveBookPaths } from "./lib/book-paths.mjs";
+import { assertCoverGenerationReceiptFile, assertCoverImageRequestFile } from "./lib/cover-image-request.mjs";
+import { assertCoverAssetNotReused, inspectCoverBitmap, resolveRequiredCoverAsset } from "./lib/cover-assets.mjs";
+import { canonicalPdfPagePath } from "./lib/pdf-page-images.mjs";
 
 const PIPELINE_VERSION = "1.0.0";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -68,13 +72,8 @@ function hashFile(path) {
   return fileHashCache.get(absolutePath);
 }
 
-function relativePath(root, path) {
-  return relative(root, path).split("\\").join("/");
-}
-
 function isWithin(root, path) {
-  const rel = relative(root, path);
-  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  return isWithinPath(root, path);
 }
 
 function localAssetPaths(config, parsed, outputDir) {
@@ -93,33 +92,61 @@ function parsedContract(name, bytes, path) {
 }
 
 function validateInputs(args) {
-  const configPath = resolve(args.config);
+  const requestedConfigPath = resolve(args.config);
   const manuscriptPath = resolve(args.manuscript);
   const planPath = args.plan ? resolve(args.plan) : null;
-  const configBytes = readFileSync(configPath);
+  const configBytes = readFileSync(requestedConfigPath);
   const manuscriptBytes = readFileSync(manuscriptPath);
   const planBytes = planPath ? readFileSync(planPath) : null;
-  const config = parsedContract("book-config", configBytes, configPath);
+  const config = parsedContract("book-config", configBytes, requestedConfigPath);
   const plan = planBytes ? parsedContract("book-plan", planBytes, planPath) : null;
   const manuscript = manuscriptBytes.toString("utf8");
   const parsed = parseManuscript(manuscript);
+  const paths = resolveBookPaths({
+    configPath: requestedConfigPath,
+    config,
+    pdf: args.pdf,
+    verificationDir: args["output-dir"],
+    forbiddenRoots: [resolve(scriptDir, "..")]
+  });
+  const configPath = paths.configPath;
   if (plan) {
     assertPlanMatchesManuscript(plan, parsed, STYLE_NAMES);
     assertPlanPolicy(plan, config, parsed);
   }
-  const outputDir = resolve(config.outputDir ?? dirname(configPath));
-  const outputHtml = resolve(outputDir, config.outputHtml ?? "index.html");
-  const pdfPath = resolve(args.pdf ?? join(outputDir, `${basename(outputHtml, ".html")}.pdf`));
-  const verificationDir = resolve(args["output-dir"] ?? join(outputDir, ".verification"));
-  if (!isWithin(outputDir, pdfPath)) throw new Error("pdf output must remain inside outputDir");
-  if (!isWithin(outputDir, verificationDir)) throw new Error("verification output must remain inside outputDir");
+  const { outputDir, outputHtml, pdfPath, verificationDir } = paths;
+  let cover = null;
+  if (plan) {
+    const request = assertCoverImageRequestFile(join(outputDir, "cover-image-request.json"), { config, plan, outputDir });
+    const assetPath = resolveRequiredCoverAsset(config.coverImage, outputDir);
+    const generationReceiptPath = join(outputDir, "cover-generation-receipt.json");
+    const report = inspectCoverBitmap(assetPath, {
+      frame: request.constraints.frame,
+      minimumDpi: request.constraints.minimumDpi
+    });
+    assertCoverAssetNotReused({
+      coverPath: assetPath,
+      coverReport: report,
+      outputDir,
+      assets: [
+        ...Object.entries(config.partImages ?? {}).map(([scope, value]) => ({ label: `partImages.${scope}`, value })),
+        ...parsed.assetReferences.map((value, index) => ({ label: `manuscript image ${index + 1}`, value }))
+      ]
+    });
+    const generationReceipt = assertCoverGenerationReceiptFile(generationReceiptPath, { config, plan, outputDir }, { assetPath, report });
+    cover = { request, generationReceipt, generationReceiptPath, assetPath, report, sha256: report.sha256 };
+  }
   const inputPaths = { config: configPath, manuscript: manuscriptPath, ...(planPath ? { plan: planPath } : {}) };
   const contentConfig = { ...config };
   delete contentConfig.outputDir;
   const inputs = {
     config: sha256(contentConfig),
     manuscript: sha256(manuscriptBytes),
-    ...(plan ? { plan: sha256(plan) } : {})
+    ...(plan ? {
+      plan: sha256(plan),
+      coverRequest: sha256(cover.request),
+      coverGenerationReceipt: sha256(cover.generationReceipt)
+    } : {})
   };
   const assetHashes = localAssetPaths(config, parsed, outputDir).map((path) => [relativePath(outputDir, path), hashFile(path)]).sort(([a], [b]) => a.localeCompare(b));
   const toolPaths = [
@@ -147,7 +174,7 @@ function validateInputs(args) {
     theme: themeHash,
     targets: sha256(targets)
   };
-  return { config, plan, manuscript, parsed, outputDir, outputHtml, pdfPath, verificationDir, inputPaths, inputs, components, inputHash };
+  return { config, plan, manuscript, parsed, outputDir, outputHtml, pdfPath, verificationDir, inputPaths, inputs, components, inputHash, cover };
 }
 
 function previousState(outputDir) {
@@ -182,6 +209,9 @@ function artifactPaths(context, tier, verification = null, aesthetic = { status:
     join(context.outputDir, "source-inventory.json"),
     join(context.outputDir, "book-build-summary.json"),
     join(context.outputDir, "book-plan-receipt.json"),
+    join(context.outputDir, "cover-image-request.json"),
+    join(context.outputDir, "cover-generation-receipt.json"),
+    join(context.outputDir, "cover-image-receipt.json"),
     ...buildFiles,
     ...(tier === "full" ? [context.pdfPath, ...pdfInspectionPaths(context, { requireAll })] : []),
     ...(tier !== "fast" ? [
@@ -197,7 +227,7 @@ function artifactPaths(context, tier, verification = null, aesthetic = { status:
   ])];
   if (requireAll) {
     const missing = candidates.filter((path) => !existsSync(path));
-    if (missing.length) throw new Error(`Required ${tier}-tier artifact(s) are missing: ${missing.map((path) => relativePath(context.outputDir, path)).join(", ")}`);
+    if (missing.length) throw new Error(`Required ${tier}-tier artifact(s) are missing from resolved outputDir ${context.outputDir}: ${missing.map((path) => relativePath(context.outputDir, path)).join(", ")}. This indicates an output-location mismatch or an incomplete build.`);
   }
   return candidates;
 }
@@ -274,7 +304,7 @@ function pdfInspectionPaths(context, { requireAll = true } = {}) {
       throw new Error(`PDF structure report has an invalid page count: ${relativePath(context.outputDir, structurePath)}`);
     }
     for (let page = 1; page <= structure.pageCount; page += 1) {
-      paths.push(join(directory, `pdf-page-${page}.png`));
+      paths.push(canonicalPdfPagePath(join(directory, "pdf-page"), page));
     }
   }
 
@@ -314,6 +344,7 @@ function runPdfInspection(context) {
     context.pdfPath,
     "--html", context.outputHtml,
     "--require-text",
+    "--render-report", renderReportPath,
     "--render", join(directory, "pdf-page"),
     "--report", structurePath
   ], "PDF structure inspection", 180_000);
@@ -373,16 +404,49 @@ function validateAestheticReview(context) {
   const { sheets: sheetEvidence, aggregateHash } = contactSheetEvidence(contactSheets, context.outputDir);
   const renderReportHash = hashFile(renderReportPath);
   const visualEvidence = readdirSync(context.verificationDir)
-    .filter((name) => /^mobile-.*\.png$/u.test(name))
+    .filter((name) => /^(?:desktop-cover|mobile-(?:cover|late-text|text-first|text-last|part-\d+))\.png$/u.test(name))
     .sort()
     .map((name) => ({ path: relativePath(context.outputDir, join(context.verificationDir, name)), sha256: hashFile(join(context.verificationDir, name)) }));
-  const requestHash = sha256({ contactSheetHash: aggregateHash, criteria: context.plan.aestheticReview.criteria, renderReportHash, visualEvidence });
+  const facts = resolvedPlanFacts(context.config, context.plan);
+  const resolved = {
+    theme: facts.theme,
+    bodyColumns: facts.bodyColumns,
+    chapterOpeners: facts.chapterOpeners,
+    coverRoute: facts.coverRoute,
+    imagePolicy: facts.imagePolicy,
+    coverRequired: true
+  };
+  const evidenceByName = new Map(visualEvidence.map((entry) => [entry.path.split("/").at(-1), entry]));
+  const requiredViews = ["desktop-cover.png", "mobile-cover.png"];
+  const missingViews = requiredViews.filter((name) => !evidenceByName.has(name));
+  if (missingViews.length) throw new Error(`Aesthetic review is missing required final-cover evidence: ${missingViews.join(", ")}`);
+  const coverEvidence = {
+    asset: relativePath(context.outputDir, context.cover.assetPath),
+    assetHash: context.cover.sha256,
+    requestHash: context.cover.request.requestHash,
+    generationReceiptHash: sha256(context.cover.generationReceipt),
+    generationId: context.plan.visuals.cover.generationId,
+    route: context.plan.layout.coverRoute,
+    subject: context.plan.visuals.cover.subject,
+    altText: context.plan.visuals.cover.altText,
+    focalPoint: context.plan.visuals.cover.focalPoint,
+    width: context.cover.report.width,
+    height: context.cover.report.height,
+    frame: context.cover.report.frame,
+    effectiveDpi: context.cover.report.effectiveDpi,
+    fullPage: evidenceByName.get("desktop-cover.png"),
+    mobile: evidenceByName.get("mobile-cover.png"),
+    thumbnailContactSheet: sheetEvidence[0]
+  };
+  const requestHash = sha256({ contactSheetHash: aggregateHash, criteria: context.plan.aestheticReview.criteria, renderReportHash, visualEvidence, resolved, coverEvidence });
   const request = {
-    version: 1,
+    version: 2,
     requestHash,
     contactSheetHash: aggregateHash,
     renderReportHash,
     criteria: context.plan.aestheticReview.criteria,
+    resolved,
+    coverEvidence,
     responseContract: "aesthetic-review",
     contactSheet: relativePath(context.outputDir, contactSheet),
     contactSheets: sheetEvidence,
@@ -402,11 +466,27 @@ function validateAestheticReview(context) {
 
 function writeArtifactManifest(context, tier, verification, aesthetic) {
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     pipelineVersion: PIPELINE_VERSION,
     inputHash: context.inputHash,
     inputs: context.inputs,
     outputs: artifactPaths(context, tier, verification, aesthetic).map((path) => outputRecord(context.outputDir, path)).sort((a, b) => a.path.localeCompare(b.path)),
+    cover: {
+      path: relativePath(context.outputDir, context.cover.assetPath),
+      sha256: context.cover.sha256,
+      bytes: statSync(context.cover.assetPath).size,
+      requestHash: context.cover.request.requestHash,
+      generationReceiptHash: sha256(context.cover.generationReceipt),
+      generationId: context.plan.visuals.cover.generationId,
+      route: context.plan.layout.coverRoute,
+      subject: context.plan.visuals.cover.subject,
+      altText: context.plan.visuals.cover.altText,
+      width: context.cover.report.width,
+      height: context.cover.report.height,
+      frame: context.cover.report.frame,
+      effectiveDpi: context.cover.report.effectiveDpi,
+      minimumDpi: context.cover.report.minimumDpi
+    },
     verification: {
       tier,
       passed: true,

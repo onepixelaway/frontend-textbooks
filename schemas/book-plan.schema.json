@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version", "manuscriptHash", "editorial", "theme", "layout", "visuals", "classifications", "exceptions", "aestheticReview"],
   "properties": {
-    "version": { "type": "integer", "enum": [1] },
+    "version": { "type": "integer", "enum": [2] },
     "manuscriptHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "editorial": {
       "type": "object", "additionalProperties": false,
@@ -28,20 +28,90 @@
     },
     "layout": {
       "type": "object", "additionalProperties": false,
-      "required": ["bodyColumns", "chapterOpeners", "rationale"],
+      "required": ["bodyColumns", "chapterOpeners", "coverRoute", "rationale"],
       "properties": {
         "bodyColumns": { "type": "string", "enum": ["text-two", "text-single", "text-three"] },
         "chapterOpeners": { "type": "boolean" },
+        "coverRoute": { "type": "string", "enum": ["type", "symbol", "photo", "minimal", "press"] },
         "rationale": { "type": "string", "minLength": 1 }
       }
     },
     "visuals": {
       "type": "object", "additionalProperties": false,
-      "required": ["policy", "diagrams", "images"],
+      "required": ["policy", "cover", "diagrams", "images"],
       "properties": {
-        "policy": { "type": "string", "enum": ["none", "selective", "image-led"] },
-        "diagrams": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["sourceBlockIds", "concept", "rationale"], "properties": { "sourceBlockIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "concept": { "type": "string", "minLength": 1 }, "rationale": { "type": "string", "minLength": 1 } } } },
-        "images": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["scope", "subject", "rationale"], "properties": { "scope": { "type": "string", "minLength": 1 }, "subject": { "type": "string", "minLength": 1 }, "rationale": { "type": "string", "minLength": 1 } } } }
+        "policy": { "type": "string", "enum": ["selective", "image-led"] },
+        "cover": {
+          "type": "object", "additionalProperties": false,
+          "required": ["sourceBlockIds", "subject", "rationale", "altText", "focalPoint", "generationId"],
+          "properties": {
+            "sourceBlockIds": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+            "subject": { "type": "string", "minLength": 12, "maxLength": 320 },
+            "rationale": { "type": "string", "minLength": 20, "maxLength": 600 },
+            "altText": { "type": "string", "minLength": 20, "maxLength": 320 },
+            "focalPoint": {
+              "type": "object", "additionalProperties": false,
+              "required": ["x", "y"],
+              "properties": {
+                "x": { "type": "number", "minimum": 0, "maximum": 100 },
+                "y": { "type": "number", "minimum": 0, "maximum": 100 }
+              }
+            },
+            "generationId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$" }
+          }
+        },
+        "diagrams": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["sourceBlockIds", "grammar", "title", "nodes", "edges", "caption", "takeaway", "rationale"],
+            "properties": {
+              "sourceBlockIds": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+              "grammar": { "type": "string", "enum": ["sequence", "comparison", "hierarchy", "anatomy", "taxonomy", "matrix", "system"] },
+              "title": { "type": "string", "minLength": 1, "maxLength": 90 },
+              "nodes": {
+                "type": "array", "minItems": 2, "maxItems": 6,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["id", "label"],
+                  "properties": {
+                    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+                    "label": { "type": "string", "minLength": 1, "maxLength": 64 },
+                    "detail": { "type": "string", "minLength": 1, "maxLength": 120 }
+                  }
+                }
+              },
+              "edges": {
+                "type": "array", "maxItems": 12,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["from", "to"],
+                  "properties": {
+                    "from": { "type": "string", "minLength": 1 },
+                    "to": { "type": "string", "minLength": 1 },
+                    "label": { "type": "string", "minLength": 1, "maxLength": 48 }
+                  }
+                }
+              },
+              "caption": { "type": "string", "minLength": 1, "maxLength": 240 },
+              "takeaway": { "type": "string", "minLength": 1, "maxLength": 180 },
+              "rationale": { "type": "string", "minLength": 1, "maxLength": 600 }
+            }
+          }
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["scope", "subject", "rationale", "altText"],
+            "properties": {
+              "scope": { "type": "string", "minLength": 1 },
+              "subject": { "type": "string", "minLength": 1 },
+              "rationale": { "type": "string", "minLength": 1 },
+              "altText": { "type": "string", "minLength": 12 }
+            }
+          }
+        }
       }
     },
     "classifications": {

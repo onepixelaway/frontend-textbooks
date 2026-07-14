@@ -70,6 +70,10 @@ const localThemes = [
   }
 ];
 
+for (const theme of localThemes) {
+  if (!theme.imagePrompt) theme.imagePrompt = colbaltTheme.imagePrompt;
+}
+
 export const DEFAULT_THEME_NAME = colbaltTheme.id;
 export const DEFAULT_THEME = colbaltTheme;
 export const THEMES = Object.create(null);

@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 
 import { acquirePipelineLock } from "../scripts/lib/pipeline-lock.mjs";
 import { runNodeScript } from "../scripts/lib/process-runner.mjs";
+import { writeBookProject } from "./helpers/book-project.mjs";
 
 const directories = [];
 const execFileAsync = promisify(execFile);
@@ -56,18 +57,18 @@ test("pipeline subprocess timeout is bounded and actionable", async () => {
 test("the workspace lock excludes direct builder and browser entry points", async () => {
   const directory = await mkdtemp(join(tmpdir(), "book-entry-lock-"));
   directories.push(directory);
-  const config = join(directory, "book.json");
-  const manuscript = join(directory, "manuscript.md");
-  await writeFile(config, JSON.stringify({ title: "Locked", author: "Test", outputDir: directory }));
-  await writeFile(manuscript, "# Locked\n\n## Chapter\n\nText.");
-  const release = acquirePipelineLock(directory);
+  const project = await writeBookProject(directory, {
+    manuscript: "# Locked\n\n## Chapter\n\nText.",
+    configOverrides: { title: "Locked", outputDir: directory }
+  });
+  const release = acquirePipelineLock(project.outputDir);
   try {
     await assert.rejects(
-      execFileAsync(process.execPath, [join(repository, "scripts/build-html-book.mjs"), config, manuscript]),
+      execFileAsync(process.execPath, [join(repository, "scripts/build-html-book.mjs"), project.configPath, project.manuscriptPath, project.planPath]),
       /already using/
     );
     await assert.rejects(
-      execFileAsync(process.execPath, [join(repository, "scripts/book-browser.mjs"), "verify", "--html", join(directory, "index.html"), "--output-dir", join(directory, ".verification")]),
+      execFileAsync(process.execPath, [join(repository, "scripts/book-browser.mjs"), "verify", "--html", join(project.outputDir, "index.html"), "--output-dir", join(project.outputDir, ".verification")]),
       /already using/
     );
   } finally {

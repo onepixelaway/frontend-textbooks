@@ -66,6 +66,108 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       return [...new Set(urls)];
     }
 
+    function coverLayoutFor(cover, manifestCover) {
+      if (!cover) return { failures: [], metrics: null };
+      const failures = [];
+      const bounds = cover.getBoundingClientRect();
+      const art = cover.querySelector(".cover-art-frame");
+      const image = cover.querySelector("img.cover-art");
+      const copy = cover.querySelector(".page-inner");
+      const title = cover.querySelector("h1");
+      const artBounds = art?.getBoundingClientRect();
+      const copyBounds = copy?.getBoundingClientRect();
+      const titleBounds = title?.getBoundingClientRect();
+      const titleStyle = title ? getComputedStyle(title) : null;
+      let titleTextBounds = null;
+      if (title) {
+        const range = document.createRange();
+        range.selectNodeContents(title);
+        titleTextBounds = range.getBoundingClientRect();
+      }
+      const tolerance = 2;
+      const outside = (inner, outer) => inner && outer && (
+        inner.left < outer.left - tolerance || inner.right > outer.right + tolerance ||
+        inner.top < outer.top - tolerance || inner.bottom > outer.bottom + tolerance
+      );
+      if (copyBounds && outside(copyBounds, bounds)) failures.push({ reason: "Cover typography band escapes the selected cover" });
+      const titleClipsHorizontally = title && title.scrollWidth > title.clientWidth + tolerance && ["hidden", "clip"].includes(titleStyle.overflowX);
+      const titleClipsVertically = title && title.scrollHeight > title.clientHeight + tolerance && ["hidden", "clip"].includes(titleStyle.overflowY);
+      if (title && (titleClipsHorizontally || titleClipsVertically || outside(titleBounds, copyBounds) || outside(titleTextBounds, copyBounds))) {
+        failures.push({
+          reason: "Cover title is clipped or overflows its typography band",
+          title: normalizeText(title.textContent).slice(0, 160),
+          clipped: { horizontal: Boolean(titleClipsHorizontally), vertical: Boolean(titleClipsVertically) }
+        });
+      }
+      if (title && !cover.classList.contains("has-unbreakable-title")) {
+        if (titleStyle.overflowWrap === "anywhere" || ["break-all", "break-word"].includes(titleStyle.wordBreak)) {
+          failures.push({ reason: "Ordinary cover title allows mid-word breaking" });
+        }
+      }
+      if (artBounds && copyBounds && intersects(artBounds, copyBounds) && Math.min(artBounds.bottom, copyBounds.bottom) - Math.max(artBounds.top, copyBounds.top) > tolerance) {
+        failures.push({ reason: "Cover artwork collides with the typography band" });
+      }
+      const decoration = cover.querySelector(".route-symbol-mark, .route-minimal-mark, .route-press-series");
+      if (decoration && titleBounds && intersects(decoration.getBoundingClientRect(), titleBounds)) {
+        failures.push({ reason: "Cover route decoration collides with the title" });
+      }
+      const expectedFocal = manifestCover?.focalPoint;
+      const imageStyle = image ? getComputedStyle(image) : null;
+      const objectPosition = imageStyle?.objectPosition || "";
+      if (expectedFocal && !objectPosition.includes(`${expectedFocal.x}%`) || expectedFocal && !objectPosition.includes(`${expectedFocal.y}%`)) {
+        failures.push({ reason: "Rendered cover crop does not use the planned focal point", expected: expectedFocal, actual: objectPosition });
+      }
+      return {
+        failures,
+        metrics: {
+          route: cover.dataset.coverRoute || "",
+          viewportWidth: window.innerWidth,
+          cover: { width: Math.round(bounds.width), height: Math.round(bounds.height) },
+          artwork: artBounds ? { width: Math.round(artBounds.width), height: Math.round(artBounds.height) } : null,
+          title: titleBounds ? {
+            width: Math.round(titleBounds.width),
+            height: Math.round(titleBounds.height),
+            textWidth: Math.round(titleTextBounds?.width ?? 0),
+            textHeight: Math.round(titleTextBounds?.height ?? 0),
+            clientWidth: title.clientWidth,
+            clientHeight: title.clientHeight,
+            scrollWidth: title.scrollWidth,
+            scrollHeight: title.scrollHeight,
+            overflowX: titleStyle.overflowX,
+            overflowY: titleStyle.overflowY,
+            overflowWrap: titleStyle.overflowWrap,
+            wordBreak: titleStyle.wordBreak
+          } : null,
+          objectPosition
+        }
+      };
+    }
+
+    function controlOcclusionsFor() {
+      const controls = [...document.querySelectorAll(".book-controls")];
+      const failures = [];
+      for (const control of controls) {
+        const style = getComputedStyle(control);
+        const bounds = control.getBoundingClientRect();
+        const visible = style.display !== "none" && style.visibility !== "hidden" && bounds.width > 0 && bounds.height > 0;
+        if (matchMedia("print").matches && visible) {
+          failures.push({ reason: "Browser controls remain visible in print" });
+          continue;
+        }
+        if (!visible) continue;
+        if (diagnostics.expectedMobile && ["fixed", "sticky"].includes(style.position)) {
+          failures.push({ reason: "Mobile browser controls retain an overlay position", position: style.position });
+        }
+        const content = [...document.querySelectorAll(".text-page [data-source-block-id], .text-page p, .text-page li")];
+        const overlap = content.find((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && intersects(bounds, rect);
+        });
+        if (overlap) failures.push({ reason: "Browser controls overlap manuscript text", sourceBlockId: overlap.dataset.sourceBlockId || "" });
+      }
+      return failures;
+    }
+
     function pageLabel(page, index) {
       if (!page) return "unknown page";
       return page.id || page.getAttribute("aria-label") || `page ${index + 1}`;
@@ -116,6 +218,16 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       return text ? text.split(/\s+/).length : 0;
     }
 
+    function comparisonTokens(value) {
+      return String(value || "")
+        .normalize("NFKC")
+        .toLocaleLowerCase()
+        .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    }
+
     function sourceTextForNode(node) {
       if (!node) return "";
       const extras = [...node.querySelectorAll("img[alt]")].map((image) => image.getAttribute("alt") || "");
@@ -123,8 +235,8 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
     }
 
     function orderedCoveredTokenCount(expected, actual) {
-      const expectedTokens = normalizeText(expected).toLocaleLowerCase().split(/\s+/).filter(Boolean);
-      const actualTokens = normalizeText(actual).toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      const expectedTokens = comparisonTokens(expected);
+      const actualTokens = comparisonTokens(actual);
       let actualIndex = 0;
       let covered = 0;
       for (const token of expectedTokens) {
@@ -140,6 +252,25 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       const bytes = new TextEncoder().encode(value);
       const digest = await crypto.subtle.digest("SHA-256", bytes);
       return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function sha256Bytes(bytes) {
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    const assetHashCache = new Map();
+    async function localAssetHash(url) {
+      const normalized = normalizeAssetUrl(url);
+      if (!normalized || new URL(normalized, document.baseURI).origin !== location.origin) return null;
+      if (!assetHashCache.has(normalized)) {
+        assetHashCache.set(normalized, (async () => {
+          const response = await fetch(normalized, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return sha256Bytes(await response.arrayBuffer());
+        })());
+      }
+      return assetHashCache.get(normalized);
     }
 
     async function sourcePreservationFor() {
@@ -471,16 +602,29 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
           node.querySelector("title")?.textContent
         ].join(" ");
         const structuredCard = !node.classList.contains("diagram-card") ||
-          (node.querySelectorAll(".diagram-node").length >= 2 && Boolean(node.querySelector(".diagram-connector"))) ||
+          (node.querySelectorAll(".diagram-node").length >= 2 && Boolean(node.querySelector(".diagram-relationships, [data-diagram-grammar]"))) ||
           Boolean(node.querySelector("svg, canvas"));
         return structuredCard && (diagramTerms.test(descriptor) || Boolean(node.querySelector("svg, canvas")));
       });
       return unique.map((node) => {
         const page = node.closest(".page");
+        const layout = node.querySelector(".diagram-flow");
+        const diagramNodes = [...node.querySelectorAll(".diagram-node")];
+        const bounds = node.getBoundingClientRect();
+        const nodeBounds = diagramNodes.map((item) => item.getBoundingClientRect());
+        const overlappingNodes = nodeBounds.some((left, leftIndex) => nodeBounds.some((right, rightIndex) => rightIndex > leftIndex && intersects(left, right)));
+        const nodesOutside = nodeBounds.some((rect) => rect.left < bounds.left - 1 || rect.right > bounds.right + 1 || rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1);
         return {
           page: pageLabel(page, pageIndexes.get(page) ?? -1),
           className: node.className || node.tagName.toLowerCase(),
-          label: normalizeText(node.getAttribute("aria-label") || node.querySelector("figcaption")?.textContent || node.querySelector("title")?.textContent || pageLabel(page, pageIndexes.get(page) ?? -1)).slice(0, 160)
+          label: normalizeText(node.getAttribute("aria-label") || node.querySelector("figcaption")?.textContent || node.querySelector("title")?.textContent || pageLabel(page, pageIndexes.get(page) ?? -1)).slice(0, 160),
+          grammar: node.dataset.diagramGrammar || "",
+          sourceBlockIds: String(node.dataset.groundingSourceBlockIds || "").split(",").filter(Boolean),
+          nodeCount: diagramNodes.length,
+          nodeLabels: diagramNodes.map((item) => normalizeText(item.textContent).slice(0, 160)),
+          columns: layout ? gridTrackCount(getComputedStyle(layout).gridTemplateColumns) : 0,
+          overflow: node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1 || nodesOutside,
+          overlappingNodes
         };
       });
     }
@@ -510,6 +654,38 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
         chapterFinalPages,
         finalPage: pages.length || null
       };
+    }
+
+    function sourceBlockPagesFor(pages) {
+      const pagesByNode = new Map(pages.map((page, index) => [page, index + 1]));
+      const ids = Array.isArray(embeddedBookData().sourceManifest?.blocks)
+        ? embeddedBookData().sourceManifest.blocks.map((block) => String(block.id || "")).filter(Boolean)
+        : [];
+      const placements = new Map();
+      for (const node of document.querySelectorAll("[data-source-block-id]")) {
+        const id = node.dataset.sourceBlockId;
+        const page = pagesByNode.get(node.closest(".page"));
+        if (!id || !page) continue;
+        const values = placements.get(id) ?? new Set();
+        values.add(page);
+        placements.set(id, values);
+      }
+      return ids.map((id) => ({ id, pages: [...(placements.get(id) ?? [])].sort((a, b) => a - b) }));
+    }
+
+    function chapterSemanticsFor() {
+      return [...document.querySelectorAll(".chapter-mount")].map((mount) => {
+        const page = mount.querySelector(".text-page");
+        const kicker = page?.querySelector(".chapter-kicker");
+        const part = kicker?.querySelector("span");
+        return {
+          chapterId: mount.dataset.chapterId || "",
+          kicker: normalizeText(kicker?.childNodes?.[0]?.textContent || kicker?.textContent || ""),
+          partLabel: normalizeText(part?.textContent || ""),
+          heading: normalizeText(page?.querySelector(".text-page-title")?.textContent || ""),
+          ariaLabel: page?.getAttribute("aria-label") || ""
+        };
+      });
     }
 
     const pages = [...document.querySelectorAll(".page")];
@@ -551,15 +727,66 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
     }));
     const cover = document.querySelector(".page.cover, .cover");
     const coverAssetUrls = new Set(assetUrlsFor(cover));
+    const manifestCover = diagnostics.manifestCover;
+    const coverContractFailures = [];
+    let renderedCoverAssetHash = null;
+    if (manifestCover) {
+      const expectedCoverAsset = normalizeAssetUrl(manifestCover.asset);
+      const coverImage = cover?.querySelector("img.cover-art");
+      const coverBounds = cover?.getBoundingClientRect();
+      const artBounds = coverImage?.getBoundingClientRect();
+      if (!cover) coverContractFailures.push({ reason: "Final selected cover is missing" });
+      if (!coverImage) coverContractFailures.push({ reason: "Final selected cover has no bitmap artwork" });
+      if (expectedCoverAsset && !coverAssetUrls.has(expectedCoverAsset)) {
+        coverContractFailures.push({ reason: "Final selected cover does not display manifest cover.asset", expectedCoverAsset, actualAssets: [...coverAssetUrls] });
+      }
+      if (cover?.dataset.coverRoute !== manifestCover.route) {
+        coverContractFailures.push({ reason: "Final selected cover route does not match the build manifest", expected: manifestCover.route, actual: cover?.dataset.coverRoute || "" });
+      }
+      if (cover?.dataset.coverRequestHash !== manifestCover.requestHash) {
+        coverContractFailures.push({ reason: "Final selected cover request hash does not match the reviewed manifest asset" });
+      }
+      if (coverImage && (coverImage.naturalWidth !== manifestCover.width || coverImage.naturalHeight !== manifestCover.height)) {
+        coverContractFailures.push({ reason: "Rendered cover pixel dimensions do not match the build manifest", expected: `${manifestCover.width}x${manifestCover.height}`, actual: `${coverImage.naturalWidth}x${coverImage.naturalHeight}` });
+      }
+      if (coverImage && manifestCover.sha256) {
+        try {
+          renderedCoverAssetHash = await localAssetHash(coverImage.currentSrc || coverImage.getAttribute("src"));
+          if (renderedCoverAssetHash !== manifestCover.sha256) {
+            coverContractFailures.push({ reason: "Rendered cover bytes do not match the build manifest hash", expected: manifestCover.sha256, actual: renderedCoverAssetHash });
+          }
+        } catch (error) {
+          coverContractFailures.push({ reason: "Rendered cover bytes could not be hashed", error: error.message });
+        }
+      }
+      if (coverBounds && artBounds && (artBounds.width < coverBounds.width * 0.85 || artBounds.height < coverBounds.height * 0.4)) {
+        coverContractFailures.push({ reason: "Required cover artwork is reduced to an incidental sliver", coverWidth: coverBounds.width, coverHeight: coverBounds.height, artWidth: artBounds.width, artHeight: artBounds.height });
+      }
+    }
+    const coverLayout = coverLayoutFor(cover, manifestCover);
+    const controlOcclusions = controlOcclusionsFor();
     const coverAssetReuses = [];
+    const interiorAssets = [];
     pages.forEach((page, index) => {
       if (page.classList.contains("cover") || page.classList.contains("option-cover")) return;
       for (const asset of assetUrlsFor(page)) {
         if (coverAssetUrls.has(asset)) {
           coverAssetReuses.push({ page: pageLabel(page, index), asset });
+        } else {
+          interiorAssets.push({ page: pageLabel(page, index), asset });
         }
       }
     });
+    if (manifestCover?.sha256) {
+      for (const entry of interiorAssets) {
+        try {
+          const hash = await localAssetHash(entry.asset);
+          if (hash && hash === manifestCover.sha256) coverAssetReuses.push({ ...entry, hash });
+        } catch {
+          // Asset loading diagnostics report unreadable local files separately.
+        }
+      }
+    }
     const partDividers = [...document.querySelectorAll(".part-divider")];
     const textOnlyPartDividers = [];
     const duplicatePartDividerAssets = [];
@@ -597,6 +824,8 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       section.contentWidthIn < narrowFlowMeasureIn);
     const diagramElements = diagramElementsFor(pages);
     const inspectionPages = inspectionPagesFor(pages);
+    const sourceBlockPages = sourceBlockPagesFor(pages);
+    const chapterSemantics = chapterSemanticsFor();
     const tailLayouts = [];
     const textPageMetrics = [];
     pages.forEach((page, index) => {
@@ -618,6 +847,7 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       }
     });
     const requireDiagrams = requiresDiagrams();
+    const preflightOverflows = Array.isArray(window.__BOOK_PREFLIGHT_OVERFLOWS) ? window.__BOOK_PREFLIGHT_OVERFLOWS : [];
     const text = document.body.innerText.replace(/\s+/g, " ").trim();
     const pageText = normalizeText(pages.map((page) => page.innerText || page.textContent).join(" "));
     const imageOnly = isImageOnlyBook();
@@ -639,7 +869,7 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       ready: bookDataNode ? window.__BOOK_READY === true : true,
       error: window.__BOOK_ERROR || null,
       bookDataError,
-      diagnostics: Object.fromEntries(Object.entries(diagnostics).filter(([key]) => key !== "manifestSource")),
+      diagnostics: Object.fromEntries(Object.entries(diagnostics).filter(([key]) => !["manifestSource", "manifestCover"].includes(key))),
       media: matchMedia("print").matches ? "print" : (window.innerWidth < 600 ? "mobile" : "screen"),
       pages: pages.length,
       printSheets: matchMedia("print").matches
@@ -654,13 +884,21 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       missingTocTargets,
       continuationMarks,
       coverAssetReuses,
+      coverContractFailures,
+      renderedCoverAssetHash,
+      coverLayoutFailures: coverLayout.failures,
+      coverLayout: coverLayout.metrics,
+      controlOcclusions,
       textOnlyPartDividers,
       duplicatePartDividerAssets,
       requirePartImages,
       requireDiagrams,
+      preflightOverflows,
       diagramElements,
       diagramCount: diagramElements.length,
       inspectionPages,
+      sourceBlockPages,
+      chapterSemantics,
       tailLayouts,
       textPageMetrics,
       repeatedOpeningExcerpts,

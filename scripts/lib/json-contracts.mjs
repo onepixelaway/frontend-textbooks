@@ -15,7 +15,7 @@ const schemaNames = Object.freeze({
 });
 const supportedSchemaKeywords = new Set([
   "$schema", "$id", "title", "description", "default", "type", "properties", "required", "additionalProperties", "enum",
-  "minLength", "pattern", "minimum", "maximum", "minItems", "uniqueItems", "items"
+  "minLength", "maxLength", "pattern", "minimum", "maximum", "minItems", "maxItems", "uniqueItems", "items"
 ]);
 
 export function contractNames() {
@@ -63,6 +63,7 @@ function validateNode(value, schema, path, errors) {
   }
   if (typeof value === "string") {
     if (schema.minLength !== undefined && value.trim().length < schema.minLength) errors.push(`${path} must not be empty`);
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${path} must contain at most ${schema.maxLength} characters`);
     if (schema.pattern && !(new RegExp(schema.pattern, "u")).test(value)) errors.push(`${path} does not match ${schema.pattern}`);
   }
   if (typeof value === "number") {
@@ -71,6 +72,7 @@ function validateNode(value, schema, path, errors) {
   }
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`${path} must contain at least ${schema.minItems} item(s)`);
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${path} must contain at most ${schema.maxItems} item(s)`);
     if (schema.uniqueItems && new Set(value.map((item) => JSON.stringify(item))).size !== value.length) errors.push(`${path} must contain unique items`);
     if (schema.items) value.forEach((item, index) => validateNode(item, schema.items, `${path}[${index}]`, errors));
   }

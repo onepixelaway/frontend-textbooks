@@ -4,13 +4,40 @@
   "title": "Final deterministic book artifact manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "pipelineVersion", "inputHash", "inputs", "outputs", "verification", "reasoning"],
+  "required": ["schemaVersion", "pipelineVersion", "inputHash", "inputs", "outputs", "cover", "verification", "reasoning"],
   "properties": {
-    "schemaVersion": { "type": "integer", "enum": [2] },
+    "schemaVersion": { "type": "integer", "enum": [3] },
     "pipelineVersion": { "type": "string", "minLength": 1 },
     "inputHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "inputs": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" } },
     "outputs": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["path", "sha256", "bytes"], "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "bytes": { "type": "integer", "minimum": 1 } } } },
+    "cover": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "requestHash", "generationReceiptHash", "generationId", "route", "subject", "altText", "width", "height", "frame", "effectiveDpi", "minimumDpi"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "requestHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "generationReceiptHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "generationId": { "type": "string", "minLength": 16 },
+        "route": { "type": "string", "enum": ["type", "symbol", "photo", "minimal", "press"] },
+        "subject": { "type": "string", "minLength": 1 },
+        "altText": { "type": "string", "minLength": 20 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "frame": {
+          "type": "object", "additionalProperties": false,
+          "required": ["widthIn", "heightIn"],
+          "properties": {
+            "widthIn": { "type": "number", "minimum": 1 },
+            "heightIn": { "type": "number", "minimum": 1 }
+          }
+        },
+        "effectiveDpi": { "type": "number", "minimum": 150 },
+        "minimumDpi": { "type": "number", "minimum": 150 }
+      }
+    },
     "verification": { "type": "object", "additionalProperties": false, "required": ["tier", "passed", "pages", "sourceCoverage", "sourceBlockCoverage", "contactSheet"], "properties": { "tier": { "type": "string", "enum": ["fast", "affected", "full"] }, "passed": { "type": "boolean" }, "pages": { "type": "integer", "minimum": 0 }, "sourceCoverage": { "type": "number", "minimum": 0, "maximum": 1 }, "sourceBlockCoverage": { "type": "number", "minimum": 0, "maximum": 1 }, "contactSheet": { "type": "string" } } },
     "reasoning": { "type": "object", "additionalProperties": false, "required": ["plan", "exceptions", "aestheticReview"], "properties": { "plan": { "type": "string" }, "exceptions": { "type": "integer", "minimum": 0 }, "aestheticReview": { "type": "string", "enum": ["not-required", "requested", "pass", "revise"] } } }
   }

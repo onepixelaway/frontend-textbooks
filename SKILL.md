@@ -26,6 +26,7 @@ The model owns judgment: audience and genre, semantic classifications, theme/lay
 ## Non-Negotiables
 
 - Preserve at least 90% of the manuscript unless the user explicitly requests abridgment. Preserve order, examples, tone, and vocabulary; additive tools never replace source prose.
+- Generate one original, manuscript-grounded local bitmap for every cover. It is mandatory, has no waiver, contains no baked-in typography, and may not be reused inside the book. A gradient, generic shape, SVG, stock placeholder, remote URL, or prior book's image is not cover artwork.
 - Produce HTML and PDF from the same source. Use US Letter, atomic designed pages, readable mobile flow, and no clipped content.
 - Make the result feel like a book, not a printed article or slide deck. Include appropriate front matter, page hierarchy, captions, running furniture, diagrams, and visual rhythm.
 - Keep production language out of reader-facing pages. Do not mention HTML, PDF export, Codex, AI, the skill, or a supplied manuscript inside the book unless requested.
@@ -36,7 +37,7 @@ The model owns judgment: audience and genre, semantic classifications, theme/lay
 
 ### 1. Prepare inputs
 
-Create `book.json` and retain the source manuscript as Markdown. Author and title are required. Use the default `colbalt` theme unless the user names a registered theme or gives a clear visual direction.
+Create `book.json` and retain the source manuscript as Markdown. Author, title, and a config-relative `coverImage` target inside `outputDir` are required. Relative paths always resolve from the directory containing `book.json`. Use the default `colbalt` theme unless the user names a registered theme or gives a clear visual direction.
 
 Treat H1 as book metadata, H2 as chapters, and H3/H4 as interior sections. Use `### Chapter title {chapter}` only when an H3 must explicitly start a chapter; empty chapters are invalid. Use `themeOverrides` for validated palette adaptations and `selectedCoverRoute` to make the chosen cover route authoritative.
 
@@ -53,7 +54,25 @@ Read the manuscript and `planning-inventory.json`. Emit only schema-valid `book-
 
 Read [references/reasoning-contracts.md](references/reasoning-contracts.md) when creating a plan, responding to repair tasks, or issuing an aesthetic verdict.
 
-### 3. Build and verify at the right tier
+### 3. Generate the required cover artwork
+
+The plan must contain a grounded `visuals.cover` decision. Prepare the canonical request before generating anything:
+
+```bash
+node "$SKILL_DIR/scripts/prepare-cover-image.mjs" \
+  book.json manuscript.md book-plan.json
+```
+
+When preparation returns `cover-generation-required`, read `cover-image-request.json`, call the available image-generation tool with its exact `prompt`, and save the result at its exact `targetAsset`. Do not rewrite the theme prompt or substitute supplied, stock, generic, or previously generated art. An occupied target without current matching provenance fails closed; `cover-ready` means the exact current request, receipt, and bytes were already revalidated. Then bind a newly generated bitmap to this manuscript and request:
+
+```bash
+node "$SKILL_DIR/scripts/record-cover-image.mjs" \
+  book.json manuscript.md book-plan.json
+```
+
+If image generation is unavailable or fails, stop and report that cover generation is required. Never continue with a type-only, symbol-only, minimal-only, or gradient fallback. The scripts reject missing, remote, escaping, corrupt, generic-alt, low-resolution, stale, and reused assets; the minimum effective cover resolution is 150 DPI in the actual configured crop (8.5 × 7.45 inches with the default cover band).
+
+### 4. Build and verify at the right tier
 
 Use one public command surface:
 
@@ -73,15 +92,15 @@ node "$SKILL_DIR/scripts/book-pipeline.mjs" finalize \
 
 Unchanged inputs reuse content-hashed results. Use `--force true` only when testing toolchain changes or invalidating a suspected cache error.
 
-### 4. Handle targeted repairs
+### 5. Handle targeted repairs
 
 On failure, read `.verification/repair-tasks.json`, its bounded source context, referenced screenshots, and only the named plan selections. Return `repair-actions.json` matching `schemas/repair-actions.schema.json`, validate it with `node "$SKILL_DIR/scripts/book-contract.mjs" validate-repairs .verification/repair-tasks.json repair-actions.json`, then make only the validated scoped change. Do not reload the full manuscript or full render report unless the repair packet is insufficient.
 
 Use `.verification/diagnostics.json` for exact codes and measurements. Full evidence stays on disk; keep chat and command output compact.
 
-### 5. Perform the visual judgment
+### 6. Perform the visual judgment
 
-When finalization returns `review-required`, read `.verification/aesthetic-review-request.json`, inspect every listed contact-sheet chunk and every listed mobile evidence image, and then inspect only the weakest full-size screenshots. Emit only `aesthetic-review.json` matching `schemas/aesthetic-review.schema.json`; copy the exact request and aggregate contact-sheet hashes. A `revise` verdict requires repairs. A `pass` verdict must reflect actual cover hierarchy, page rhythm, typography, diagram clarity, whitespace, cohesion, and mobile reading.
+When finalization returns `review-required`, read `.verification/aesthetic-review-request.json`, inspect its full-page final cover, cover thumbnail/contact sheet, mobile cover, every listed contact-sheet chunk, and every listed mobile evidence image, then inspect only the weakest full-size screenshots. Emit only `aesthetic-review.json` matching `schemas/aesthetic-review.schema.json`; copy the exact request and aggregate contact-sheet hashes. A `revise` verdict requires repairs. A `pass` verdict must reflect the actual hashed cover asset and route, cover hierarchy and crop, page rhythm, typography, diagram clarity, whitespace, cohesion, and mobile reading.
 
 Resume without rerendering unchanged work:
 
@@ -91,18 +110,18 @@ node "$SKILL_DIR/scripts/book-pipeline.mjs" finalize \
   --tier full --aesthetic-review aesthetic-review.json
 ```
 
-### 6. Deliver
+### 7. Deliver
 
-Deliver the HTML, PDF, approximate page count, word and exact-block preservation percentages, and any material caveats. A complete run must have `artifact-manifest.json` with passing full verification and, when required, a passing aesthetic review.
+Deliver the HTML, PDF, approximate page count, word and exact-block preservation percentages, and any material caveats. A complete run must have `artifact-manifest.json` with passing full verification, the exact cover asset hash and generation receipt, and, when required, a passing aesthetic review. Never report success when the selected final cover does not visibly use that asset.
 
 ## Design Decisions
 
 - Start chapters with actual prose, not unrequested opener spreads.
 - Use measured `.page.text-page` layouts for designed prose. Two columns suit analytical reading; one column suits slow emphasis; three columns suit short modular material.
 - Add 2–4 manuscript-grounded diagrams or tools for designed nonfiction when relationships exist. Use comparison, sequence, hierarchy, anatomy, taxonomy, matrix, or system grammar that matches the idea.
-- Use generated images for manuscript-grounded atmosphere or editorial art when useful and available. The active theme module is the sole source of its image prompt template.
+- Always generate manuscript-grounded cover artwork. Generate additional editorial images only when useful. The active theme module is the sole source of all image-prompt prose.
 - Treat short tail pages, sparse tools, and 4–6 item grids as deliberate compositions, not leftover blank space.
-- Create distinct cover routes for visually led work and keep the selected route aligned with the final cover.
+- Every supported cover route must visibly integrate the required artwork; keep the selected route aligned with the final cover and evidence.
 
 Read only the reference needed for the current decision:
 

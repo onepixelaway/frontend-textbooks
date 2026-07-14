@@ -6,6 +6,8 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 import { promisify } from "node:util";
 import { serializeBookClientProgram } from "../scripts/lib/book-client-program.mjs";
+import { writeBookProject } from "./helpers/book-project.mjs";
+import { writeTestPng } from "./helpers/fixture-assets.mjs";
 
 const execFileAsync = promisify(execFile);
 const builder = new URL("../scripts/build-html-book.mjs", import.meta.url);
@@ -31,28 +33,27 @@ Finish safely.`) {
   const root = await mkdtemp(join(tmpdir(), "frontend-textbooks-build-"));
   temporaryDirectories.push(root);
   const outputDir = join(root, "output");
-  await mkdir(join(outputDir, "assets"), { recursive: true });
-  await writeFile(join(outputDir, "assets", "cover.png"), "cover");
-  await writeFile(join(outputDir, "assets", "part.png"), "part");
-  const configPath = join(root, "book.json");
-  const manuscriptPath = join(root, "manuscript.md");
-  const config = {
-    title: "Proof Book",
-    author: "Test Author",
-    outputDir,
-    coverImage: "assets/cover.png",
-    partImages: { Build: "assets/part.png" },
-    requireDiagrams: false,
-    ...configOverrides
-  };
-  await writeFile(configPath, JSON.stringify(config));
-  await writeFile(manuscriptPath, manuscript);
-  return { root, outputDir, configPath, manuscriptPath };
+  const invalidCover = /^(?:https?:)?\/\//iu.test(String(configOverrides.coverImage ?? "")) || String(configOverrides.coverImage ?? "").includes("..");
+  const paths = await writeBookProject(root, {
+    manuscript,
+    configOverrides: {
+      title: "Proof Book",
+      author: "Test Author",
+      outputDir,
+      partImages: { Build: "assets/part.png" },
+      requirePartImages: /^## Part(?:\s|$)/imu.test(manuscript),
+      ...configOverrides
+    },
+    writeRequest: !invalidCover,
+    writeCover: !invalidCover
+  });
+  await writeTestPng(join(outputDir, "assets", "part.png"), { rgb: [166, 82, 52] });
+  return paths;
 }
 
 test("build embeds source coverage and duplicate-safe chapter mounts", async () => {
   const paths = await fixture();
-  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
   const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
   const bookDataText = html.match(/<script type="application\/json" id="book-data">([^<]+)<\/script>/)?.[1];
   assert.ok(bookDataText);
@@ -90,7 +91,7 @@ test("H1 metadata stays in the denominator and maps only to an actually matching
 ## Chapter
 
 Preserved body copy.`);
-  await execFileAsync(process.execPath, [builder.pathname, matching.configPath, matching.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, matching.configPath, matching.manuscriptPath, matching.planPath]);
   const matchingHtml = await readFile(join(matching.outputDir, "index.html"), "utf8");
   const matchingData = JSON.parse(matchingHtml.match(/<script type="application\/json" id="book-data">([^<]+)<\/script>/)[1]);
   const matchingMetadata = matchingData.sourceManifest.blocks.find((block) => block.kind === "metadata");
@@ -106,7 +107,7 @@ Preserved body copy.`);
 ## Chapter
 
 Short body.`);
-  await execFileAsync(process.execPath, [builder.pathname, divergent.configPath, divergent.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, divergent.configPath, divergent.manuscriptPath, divergent.planPath]);
   const divergentHtml = await readFile(join(divergent.outputDir, "index.html"), "utf8");
   const divergentData = JSON.parse(divergentHtml.match(/<script type="application\/json" id="book-data">([^<]+)<\/script>/)[1]);
   const divergentMetadata = divergentData.sourceManifest.blocks.find((block) => block.kind === "metadata");
@@ -118,12 +119,34 @@ Short body.`);
   assert.match(divergentHtml, /<section class="page title-page"[\s\S]*?<h1>Proof Book<\/h1>/);
 });
 
+test("Opening is semantic introduction and no-part chapters invent no part label", async () => {
+  const paths = await fixture({ partImages: {}, requirePartImages: false }, `# Proof Book
+
+## Opening
+
+Front matter prose.
+
+## Numbered chapter
+
+Numbered prose.`);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
+  const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+  const data = JSON.parse(html.match(/<script type="application\/json" id="book-data">([^<]+)<\/script>/)[1]);
+
+  assert.deepEqual(data.chapters.map(({ title, number, part }) => ({ title, number, part })), [
+    { title: "Opening", number: "Introduction", part: null },
+    { title: "Numbered chapter", number: "1", part: null }
+  ]);
+  assert.doesNotMatch(html, /Chapter\s+Opening|Chapter\s+Introduction\s+Opening/iu);
+  assert.match(html, /<span>Introduction<\/span>\s*<span>Opening<\/span>/u);
+});
+
 test("build manifest allowlists only generated pages and canonical local assets", async () => {
   const paths = await fixture();
-  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
   const manifest = JSON.parse(await readFile(join(paths.outputDir, "book-build-manifest.json"), "utf8"));
 
-  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.schemaVersion, 2);
   assert.equal(manifest.entry, "index.html");
   assert.equal(manifest.coverOptions, "cover-options.html");
   assert.deepEqual(manifest.files, ["index.html", "cover-options.html", "assets/cover.png", "assets/part.png"]);
@@ -156,7 +179,7 @@ The diagram is part of the manuscript.
 ![A useful diagram](assets/body.png)`);
   await writeFile(join(paths.outputDir, "assets", "body.png"), "body");
 
-  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
   const manifest = JSON.parse(await readFile(join(paths.outputDir, "book-build-manifest.json"), "utf8"));
 
   assert.ok(manifest.files.includes("assets/body.png"));
@@ -167,7 +190,7 @@ test("manifesting rejects local assets that traverse outside outputDir", async (
   await writeFile(join(paths.root, "outside.png"), "outside");
 
   await assert.rejects(
-    execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+    execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
     /outside outputDir/
   );
 });
@@ -177,7 +200,7 @@ test("manifesting treats URL-style backslashes as path separators", async () => 
   await writeFile(join(paths.root, "outside.png"), "outside");
 
   await assert.rejects(
-    execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+    execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
     /outside outputDir/
   );
 });
@@ -186,7 +209,7 @@ test("builder rejects generated-path collisions and nested entries", async (t) =
   await t.test("cover options collision", async () => {
     const paths = await fixture({ outputHtml: "cover-options.html" });
     await assert.rejects(
-      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
       /outputHtml|reserved|collision/i
     );
   });
@@ -194,7 +217,7 @@ test("builder rejects generated-path collisions and nested entries", async (t) =
   await t.test("nested entry", async () => {
     const paths = await fixture({ outputHtml: "nested/index.html" });
     await assert.rejects(
-      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
       /outputHtml|single filename|nested/i
     );
   });
@@ -204,8 +227,18 @@ test("builder rejects generated-path collisions and nested entries", async (t) =
     const collidingManuscript = join(paths.outputDir, "manuscript.html");
     await writeFile(collidingManuscript, "# Proof Book\n\n## Chapter\n\nKeep this source.");
     await assert.rejects(
-      execFileAsync(process.execPath, [builder.pathname, paths.configPath, collidingManuscript]),
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, collidingManuscript, paths.planPath]),
       /collides|input/i
+    );
+  });
+
+  await t.test("plan receipt overwrite", async () => {
+    const paths = await fixture();
+    const collidingPlan = join(paths.outputDir, "book-plan-receipt.json");
+    await writeFile(collidingPlan, await readFile(paths.planPath));
+    await assert.rejects(
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, collidingPlan]),
+      /collides.*plan input/i
     );
   });
 });
@@ -213,8 +246,8 @@ test("builder rejects generated-path collisions and nested entries", async (t) =
 test("builder rejects protocol-relative remote assets", async () => {
   const paths = await fixture({ coverImage: "//cdn.example.com/cover.png", partImages: {}, requirePartImages: false });
   await assert.rejects(
-    execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
-    /protocol-relative|https/i
+    execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
+    /LOCAL_REQUIRED|remote URL|protocol-relative|https/i
   );
 });
 
@@ -231,7 +264,7 @@ test("theme overrides merge known validated colors into the selected preset", as
       coverBand: "#003F88"
     }
   });
-  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
   const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
 
   assert.match(html, /--heading-ink: #003F88;/);
@@ -245,7 +278,7 @@ test("theme overrides reject unknown keys and unsafe CSS values", async (t) => {
   await t.test("unknown key", async () => {
     const paths = await fixture({ themeOverrides: { surprise: "#123456" } });
     await assert.rejects(
-      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
       /themeOverrides|additional propert|surprise/i
     );
   });
@@ -253,7 +286,7 @@ test("theme overrides reject unknown keys and unsafe CSS values", async (t) => {
   await t.test("unsafe value", async () => {
     const paths = await fixture({ themeOverrides: { accent: "red; } body { display: none" } });
     await assert.rejects(
-      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]),
+      execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
       /themeOverrides|pattern|accent/i
     );
   });
@@ -265,11 +298,11 @@ test("selected cover route drives the final cover through the shared five-route 
     requirePartImages: false,
     selectedCoverRoute: "symbol"
   });
-  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
   const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
   const options = await readFile(join(paths.outputDir, "cover-options.html"), "utf8");
 
-  assert.match(html, /class="page option-cover cover route-symbol"[^>]*data-cover-route="symbol"/);
+  assert.match(html, /class="page option-cover has-cover-art title-short cover route-symbol"[^>]*data-cover-route="symbol"/);
   assert.doesNotMatch(html, /class="page cover"/);
   assert.equal((options.match(/data-cover-route=/g) || []).length, 5);
   for (const route of ["type", "symbol", "photo", "minimal", "press"]) {
@@ -288,7 +321,7 @@ test("bullet-only chapters produce a useful opener summary", async () => {
 
 - First concrete action
 - Second concrete action`);
-  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath]);
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
   const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
 
   assert.match(html, /class="chapter-summary no-indent">First concrete action Second concrete action<\/p>/);

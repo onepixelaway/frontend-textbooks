@@ -49,8 +49,11 @@ function parseArgs(argv) {
   return args;
 }
 
-function htmlContext(htmlPath) {
+function htmlContext(htmlPath, { requireCoverContract = false } = {}) {
   const context = createStaticAssetContext(htmlPath);
+  if (requireCoverContract && context.manifest?.schemaVersion !== 2) {
+    throw new Error("COVER_CONTRACT_REQUIRED: PDF export and finalization require book-build-manifest.json schemaVersion 2 with the exact generated cover asset. Rebuild through the frontend-textbooks plan v2 pipeline.");
+  }
   return { ...context, htmlPath: context.entryReal };
 }
 
@@ -149,6 +152,7 @@ async function exportPdfInBrowser(browser, context, url, origin, args, readySess
       await page.emulateMedia({ media: "print" });
       await loadBook(page, url, args.wait, diagnostics);
       diagnostics.manifestSource = context.manifest?.source ?? null;
+      diagnostics.manifestCover = context.manifest?.cover ?? null;
       readiness = await assertReady(page, diagnostics);
     }
     const sourceManifest = await page.evaluate(() => {
@@ -171,7 +175,8 @@ async function exportPdfInBrowser(browser, context, url, origin, args, readySess
     await assertReady(page, diagnostics);
     const pdf = validatePdfStructure(temporaryPdf, readiness.printSheets, {
       requireText: readiness.words > 0 && !readiness.imageOnly,
-      sourceManifest
+      sourceManifest,
+      sourceTopology: readiness.sourceBlockPages ?? []
     });
     renameSync(temporaryPdf, outputPdf);
     return { outputPdf, bytes: statSync(outputPdf).size, readiness, pdf };
@@ -182,7 +187,7 @@ async function exportPdfInBrowser(browser, context, url, origin, args, readySess
 }
 
 async function exportPdf(args) {
-  const context = htmlContext(args.html);
+  const context = htmlContext(args.html, { requireCoverContract: true });
   return await withServer(context, async (url, origin) => {
     const browser = await launchChromium();
     try {
@@ -210,20 +215,23 @@ async function inspectViewport(browser, context, url, origin, {
     const diagnostics = await installPageGuards(page, context, origin);
     await loadBook(page, url, waitMode, diagnostics);
     diagnostics.manifestSource = context.manifest?.source ?? null;
+    diagnostics.manifestCover = context.manifest?.cover ?? null;
     diagnostics.expectedMobile = viewport.width < 600;
     if (media === "screen") {
       await page.screenshot({ path: join(outputDir, `${name}-viewport.png`), fullPage: false });
+      await screenshotIfPresent(page, outputDir, `${name}-cover`, ".page.cover, .cover");
       if (name === "desktop" && captureAllPages) {
         await screenshotEveryPage(page, outputDir, "desktop");
       } else if (name === "desktop") {
         await screenshotSourcePages(page, outputDir, sourceIds);
       } else {
-        await screenshotIfPresent(page, outputDir, `${name}-cover`, ".cover, .page");
         const textPages = page.locator(".text-page");
         const textPageCount = await textPages.count();
         if (textPageCount > 0) {
           await textPages.first().screenshot({ path: join(outputDir, `${name}-text-first.png`), timeout: 10000 });
           await textPages.last().screenshot({ path: join(outputDir, `${name}-text-last.png`), timeout: 10000 });
+          await textPages.last().scrollIntoViewIfNeeded();
+          await page.screenshot({ path: join(outputDir, `${name}-late-text.png`), fullPage: false });
         }
         const dividerCount = await page.locator(".part-divider").count();
         for (let index = 0; index < dividerCount; index += 1) {
@@ -329,7 +337,7 @@ async function verifyBook(args) {
 }
 
 async function finalizeBook(args) {
-  const context = htmlContext(args.html);
+  const context = htmlContext(args.html, { requireCoverContract: true });
   return await withServer(context, async (url, origin) => {
     const browser = await launchChromium();
     try {

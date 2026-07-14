@@ -8,6 +8,7 @@ export const GUARD_CHECKS = Object.freeze([
 ]);
 
 export const REPORT_CHECKS = Object.freeze([
+  { field: "preflightOverflows", code: "ATOMIC_BLOCK_OVERSIZE", message: "planned atomic element(s) exceed a text page", actions: ["rewrite-visual", "change-layout"] },
   { field: "overflowFrames", code: "FRAME_OVERFLOW", message: "text frame(s) overflow", actions: ["repaginate", "change-layout"] },
   { field: "fixedPageOverflows", code: "PAGE_OVERFLOW", message: "fixed page(s) overflow or clip content", actions: ["repaginate", "change-layout", "remove-furniture"] },
   { field: "mobileHorizontalOverflows", code: "MOBILE_HORIZONTAL_OVERFLOW", message: "mobile horizontal overflow(s)", actions: ["change-layout"] },
@@ -15,6 +16,9 @@ export const REPORT_CHECKS = Object.freeze([
   { field: "tailOverlaps", code: "TAIL_OVERLAP", message: "tail furniture block(s) overlap text" },
   { field: "missingTocTargets", code: "TOC_TARGET_MISSING", message: "table-of-contents page reference(s) are missing or blank" },
   { field: "continuationMarks", code: "CONTINUATION_MARK_VISIBLE", message: "continuation marker(s) are visible in text-page titles" },
+  { field: "coverContractFailures", code: "COVER_ART_INVALID", message: "final selected cover does not display the required generated bitmap contract", actions: ["replace-asset", "change-layout"] },
+  { field: "coverLayoutFailures", code: "COVER_LAYOUT_INVALID", message: "final selected cover has clipping, collision, focal-point, or title-wrap failures", actions: ["change-layout"] },
+  { field: "controlOcclusions", code: "CONTROL_OCCLUSION", message: "browser controls can obscure manuscript content", actions: ["change-layout"] },
   { field: "coverAssetReuses", code: "COVER_ASSET_REUSED", message: "interior page asset(s) reuse the cover image", actions: ["replace-asset"] },
   { field: "textOnlyPartDividers", code: "PART_IMAGE_MISSING", message: "part divider(s) are missing generated image assets", actions: ["replace-asset"] },
   { field: "duplicatePartDividerAssets", code: "PART_IMAGE_DUPLICATE", message: "duplicated part-divider image asset(s)", actions: ["replace-asset"] },

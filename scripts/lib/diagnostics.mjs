@@ -2,6 +2,38 @@ import { canonicalJson, sha256 } from "./content-hash.mjs";
 import { GUARD_CHECKS, REPAIR_ACTIONS, REPORT_CHECKS } from "./verification-checks.mjs";
 import { assertContract } from "./json-contracts.mjs";
 
+const PHASES = Object.freeze({
+  SOURCE_CONTRACT_INVALID: "contract",
+  PAGE_ERROR: "contract",
+  REQUEST_BLOCKED: "contract",
+  ASSET_FAILURE: "contract",
+  COVER_ART_INVALID: "contract",
+  COVER_ASSET_REUSED: "contract",
+  PART_IMAGE_MISSING: "contract",
+  PART_IMAGE_DUPLICATE: "contract",
+  READY_TIMEOUT: "readiness",
+  ATOMIC_BLOCK_OVERSIZE: "pagination",
+  FRAME_OVERFLOW: "pagination",
+  PAGE_OVERFLOW: "pagination",
+  MOBILE_HORIZONTAL_OVERFLOW: "pagination",
+  MOBILE_MULTICOLUMN: "pagination",
+  TAIL_OVERLAP: "pagination",
+  SHORT_TWO_COLUMN: "pagination",
+  SPARSE_GRID_COLUMNS: "pagination",
+  MEASURED_TEXT_MISSING: "pagination",
+  UNMEASURED_FLOW: "pagination",
+  NARROW_FLOW: "pagination",
+  TOC_TARGET_MISSING: "structure",
+  DIAGRAM_REQUIRED: "structure",
+  SOURCE_COVERAGE_LOW: "source"
+});
+
+const PHASE_ORDER = Object.freeze(["contract", "readiness", "pagination", "structure", "source", "aesthetic", "pdf"]);
+
+function phaseFor(code) {
+  return PHASES[code] ?? "aesthetic";
+}
+
 function values(value) {
   if (Array.isArray(value)) return value;
   const count = Number(value) || 0;
@@ -28,6 +60,9 @@ function diagnostic(code, viewport, value, index, message = "") {
     id: `diag-${viewport}-${code.toLowerCase().replaceAll("_", "-")}-${suffix}`,
     code,
     severity: "error",
+    phase: phaseFor(code),
+    actionable: true,
+    derived: false,
     viewport,
     ...(target.pageId ? { pageId: target.pageId } : {}),
     ...(target.sourceBlockIds ? { sourceBlockIds: target.sourceBlockIds } : {}),
@@ -36,6 +71,37 @@ function diagnostic(code, viewport, value, index, message = "") {
     ...(target.actual && Object.keys(target.actual).length ? { actual: target.actual } : {}),
     message: message || `${code.replaceAll("_", " ").toLowerCase()} detected`
   };
+}
+
+function applyCausalStatus(items, reports) {
+  for (const viewport of ["desktop", "print", "mobile"]) {
+    const viewportItems = items.filter((item) => item.viewport === viewport);
+    if (!viewportItems.length) continue;
+
+    const contractRoots = viewportItems.filter((item) => item.phase === "contract");
+    const preflightRoots = viewportItems.filter((item) => item.code === "ATOMIC_BLOCK_OVERSIZE");
+    const paginationRoots = preflightRoots.length
+      ? preflightRoots
+      : viewportItems.filter((item) => item.code === "FRAME_OVERFLOW" || item.code === "PAGE_OVERFLOW");
+    const readinessRoots = viewportItems.filter((item) => item.code === "READY_TIMEOUT");
+    const incomplete = reports[viewport]?.ready !== true;
+
+    let rootItems = contractRoots;
+    if (!rootItems.length && incomplete) rootItems = paginationRoots.length ? paginationRoots : readinessRoots;
+    if (!rootItems.length || !incomplete) continue;
+
+    const rootIds = rootItems.map((item) => item.id).sort();
+    for (const item of viewportItems) {
+      if (rootIds.includes(item.id)) continue;
+      const downstream = ["readiness", "structure", "source", "aesthetic"].includes(item.phase);
+      const redundantPagination = paginationRoots.length && item.phase === "pagination" && !paginationRoots.some((root) => root.id === item.id);
+      if (!downstream && !redundantPagination) continue;
+      item.actionable = false;
+      item.derived = true;
+      item.blockedBy = rootIds;
+    }
+  }
+  return items;
 }
 
 function sourceCoverageFailure(sourcePreservation) {
@@ -98,28 +164,50 @@ export function normalizeDiagnostics(reports) {
     });
     if (!uniqueItems.has(key)) uniqueItems.set(key, { ...item, id: `diag-${item.viewport}-${item.code.toLowerCase().replaceAll("_", "-")}-${sha256(key).slice(0, 10)}` });
   }
-  const normalizedItems = [...uniqueItems.values()].sort((a, b) => a.id.localeCompare(b.id));
+  const normalizedItems = applyCausalStatus([...uniqueItems.values()], reports).sort((a, b) => {
+    const phaseDifference = PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase);
+    return phaseDifference || a.id.localeCompare(b.id);
+  });
+  const actionableCount = normalizedItems.filter((item) => item.actionable).length;
+  const derivedCount = normalizedItems.filter((item) => item.derived).length;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status: normalizedItems.length ? "fail" : "pass",
-    counts: { error: normalizedItems.length, warning: 0 },
+    counts: { error: normalizedItems.length, warning: 0, actionable: actionableCount, derived: derivedCount },
     items: normalizedItems
   };
 }
 
 export function createRepairTasks(diagnostics) {
+  const grouped = new Map();
+  for (const item of diagnostics.items.filter((candidate) => candidate.actionable)) {
+    const key = item.code === "ATOMIC_BLOCK_OVERSIZE"
+      ? canonicalJson({ code: item.code, pageId: item.pageId ?? "", sourceBlockIds: [...(item.sourceBlockIds ?? [])].sort() })
+      : item.id;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.observedViewports.add(item.viewport);
+      existing.items.push(item);
+    } else {
+      grouped.set(key, { primary: item, observedViewports: new Set([item.viewport]), items: [item] });
+    }
+  }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     reportHash: sha256(diagnostics),
-    tasks: diagnostics.items.map((item) => ({
+    tasks: [...grouped.values()].map(({ primary: item, observedViewports, items }) => ({
       failureId: item.id,
       code: item.code,
       viewport: item.viewport,
+      observedViewports: [...observedViewports].sort(),
       target: item.pageId || "book",
       sourceBlockIds: item.sourceBlockIds ?? [],
       sourceContext: item.sourceContext ?? [],
       planSelectionIds: item.sourceBlockIds ?? [],
-      evidencePaths: [...new Set(["contact-sheet.png", ...(item.evidencePaths ?? []), ...(item.viewport === "desktop" || item.viewport === "mobile" ? [`${item.viewport}-viewport.png`] : [])])],
+      evidencePaths: [...new Set(["contact-sheet.png", ...items.flatMap((entry) => [
+        ...(entry.evidencePaths ?? []),
+        ...(entry.viewport === "desktop" || entry.viewport === "mobile" ? [`${entry.viewport}-viewport.png`] : [])
+      ])])],
       allowedActions: REPAIR_ACTIONS[item.code] ?? ["change-layout"],
       instruction: item.message
     }))

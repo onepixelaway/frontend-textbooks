@@ -8,9 +8,16 @@ import { promisify } from "node:util";
 import { parseManuscript } from "../scripts/lib/manuscript.mjs";
 import { assertContract } from "../scripts/lib/json-contracts.mjs";
 import { sha256 } from "../scripts/lib/content-hash.mjs";
+import { createCoverGenerationReceipt, createCoverImageRequest } from "../scripts/lib/cover-image-request.mjs";
+import { writeBookProject } from "./helpers/book-project.mjs";
+import { diagramDecision, writeTestPng } from "./helpers/fixture-assets.mjs";
 
 const execFileAsync = promisify(execFile);
 const pipeline = new URL("../scripts/book-pipeline.mjs", import.meta.url).pathname;
+const builder = new URL("../scripts/build-html-book.mjs", import.meta.url).pathname;
+const prepareCover = new URL("../scripts/prepare-cover-image.mjs", import.meta.url).pathname;
+const recordCover = new URL("../scripts/record-cover-image.mjs", import.meta.url).pathname;
+const repository = new URL("..", import.meta.url).pathname;
 const temporaryDirectories = [];
 after(async () => Promise.all(temporaryDirectories.map((path) => rm(path, { recursive: true, force: true }))));
 
@@ -18,34 +25,29 @@ async function fixture({ aestheticRequired = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "frontend-textbooks-pipeline-"));
   temporaryDirectories.push(root);
   const outputDir = join(root, "output");
-  await mkdir(outputDir);
   const manuscript = "# Pipeline Book\n\n## Chapter\n\nA deterministic paragraph for the pipeline.";
-  const parsed = parseManuscript(manuscript);
-  const sourceId = parsed.sourceManifest.blocks.find((block) => block.kind === "p").id;
-  const manuscriptHash = parsed.sourceManifest.sha256;
-  const configPath = join(root, "book.json");
-  const manuscriptPath = join(root, "manuscript.md");
-  const planPath = join(root, "book-plan.json");
-  await writeFile(configPath, JSON.stringify({ title: "Pipeline Book", author: "Test", outputDir, style: "technical", requireDiagrams: false, requirePartImages: false }));
-  await writeFile(manuscriptPath, manuscript);
-  await writeFile(planPath, JSON.stringify({
-    version: 1,
-    manuscriptHash,
-    editorial: { audience: "reader", genre: "manual", purpose: "teach", tone: "clear" },
-    theme: { id: "technical", rationale: "Clear system typography" },
-    layout: { bodyColumns: "text-single", chapterOpeners: false, rationale: "Short source" },
-    visuals: { policy: "none", diagrams: [], images: [] },
-    classifications: [{ sourceBlockId: sourceId, role: "narrative", treatment: "prose", rationale: "Body text" }],
-    exceptions: [{ rule: "waive-diagrams", scope: "book", rationale: "Short fixture has no relationship to diagram" }],
-    aestheticReview: { required: aestheticRequired, criteria: ["hierarchy", "page rhythm"] }
-  }));
-  return { root, outputDir, configPath, manuscriptPath, planPath };
+  return writeBookProject(root, {
+    manuscript,
+    configOverrides: { title: "Pipeline Book", author: "Test", outputDir, style: "technical" },
+    planOverrides: { aestheticRequired }
+  });
 }
 
-async function run(paths, mode = "build", extra = [], { env = {} } = {}) {
+async function refreshCoverRequest(paths) {
+  const config = JSON.parse(await readFile(paths.configPath));
+  const plan = JSON.parse(await readFile(paths.planPath));
+  const request = createCoverImageRequest({ config, plan, outputDir: paths.outputDir });
+  await writeFile(join(paths.outputDir, "cover-image-request.json"), JSON.stringify(request));
+  const receipt = createCoverGenerationReceipt({ config, plan, outputDir: paths.outputDir });
+  await writeFile(join(paths.outputDir, "cover-generation-receipt.json"), JSON.stringify(receipt));
+  return request;
+}
+
+async function run(paths, mode = "build", extra = [], { env = {}, cwd } = {}) {
   return execFileAsync(process.execPath, [pipeline, mode, "--config", paths.configPath, "--manuscript", paths.manuscriptPath, "--plan", paths.planPath, ...extra], {
-    timeout: 30_000,
-    env: { ...process.env, ...env }
+    timeout: mode === "finalize" ? 120_000 : 30_000,
+    env: { ...process.env, ...env },
+    ...(cwd ? { cwd } : {})
   });
 }
 
@@ -79,12 +81,117 @@ test("one orchestration command emits deterministic fast-tier artifacts", async 
   assert.match(await readFile(join(paths.outputDir, "index.html"), "utf8"), /<!doctype html>/i);
 });
 
+test("relative outputDir is config-relative across pipeline and direct-builder working directories", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "frontend textbooks relative cwd "));
+  const unrelated = await mkdtemp(join(tmpdir(), "frontend-textbooks-unrelated-cwd-"));
+  const thirdCwd = await mkdtemp(join(tmpdir(), "frontend-textbooks-third-cwd-"));
+  temporaryDirectories.push(projectRoot, unrelated, thirdCwd);
+  const paths = await writeBookProject(projectRoot, {
+    configOverrides: { title: "Relative Paths", outputDir: "build" },
+    manuscript: "# Relative Paths\n\n## Chapter\n\nThe output location must follow the config file, never the shell working directory."
+  });
+  const accidentalPath = join(repository, "build", "index.html");
+  const accidentalBefore = await readFile(accidentalPath).catch(() => null);
+
+  const fromProject = JSON.parse((await run(paths, "build", [], { cwd: projectRoot })).stdout);
+  assert.equal(fromProject.status, "pass");
+  const manifestBefore = await readFile(join(paths.outputDir, "artifact-manifest.json"));
+  const fromUnrelated = JSON.parse((await run(paths, "build", [], { cwd: unrelated })).stdout);
+  assert.equal(fromUnrelated.skipped, true);
+  assert.deepEqual(await readFile(join(paths.outputDir, "artifact-manifest.json")), manifestBefore);
+
+  await execFileAsync(process.execPath, [builder, paths.configPath, paths.manuscriptPath, paths.planPath], { cwd: thirdCwd, timeout: 30_000 });
+  await Promise.all([
+    "index.html",
+    "cover-options.html",
+    "book-build-manifest.json",
+    "source-inventory.json",
+    "book-build-summary.json",
+    "book-plan-receipt.json"
+  ].map((name) => readFile(join(paths.outputDir, name))));
+  const accidentalAfter = await readFile(accidentalPath).catch(() => null);
+  assert.deepEqual(accidentalAfter, accidentalBefore, "building must not write generated artifacts into the skill source tree");
+});
+
 test("validation rejects dangling model source references before building", async () => {
   const paths = await fixture();
   const plan = JSON.parse(await readFile(paths.planPath));
   plan.classifications[0].sourceBlockId = "source-p-missing";
   await writeFile(paths.planPath, JSON.stringify(plan));
   await assert.rejects(run(paths, "validate"), /unknown source block/i);
+});
+
+test("cover generation failure stops before build or delivery with an actionable error", async (t) => {
+  await t.test("missing generated bitmap", async () => {
+    const paths = await fixture();
+    await rm(join(paths.outputDir, "assets", "cover.png"));
+    await assert.rejects(run(paths, "validate"), /COVER_ASSET_MISSING.*Generate it from cover-image-request\.json/i);
+    await assert.rejects(readFile(join(paths.outputDir, "artifact-manifest.json")), /ENOENT/);
+  });
+
+  await t.test("missing generation receipt", async () => {
+    const paths = await fixture();
+    await rm(join(paths.outputDir, "cover-generation-receipt.json"));
+    await assert.rejects(run(paths, "validate"), /COVER_GENERATION_RECEIPT_MISSING.*record-cover-image\.mjs/i);
+    await assert.rejects(readFile(join(paths.outputDir, "artifact-manifest.json")), /ENOENT/);
+  });
+});
+
+test("cover preparation and recording form an explicit fail-closed generation handoff", async () => {
+  const root = await mkdtemp(join(tmpdir(), "frontend-textbooks-cover-handoff-"));
+  const unrelated = await mkdtemp(join(tmpdir(), "frontend-textbooks-cover-handoff-cwd-"));
+  temporaryDirectories.push(root, unrelated);
+  const paths = await writeBookProject(root, {
+    writeCover: false,
+    writeRequest: false,
+    configOverrides: { outputDir: "build" }
+  });
+  const staleReceipt = join(paths.outputDir, "cover-generation-receipt.json");
+  await writeFile(staleReceipt, "stale");
+
+  const prepared = JSON.parse((await execFileAsync(process.execPath, [prepareCover, paths.configPath, paths.manuscriptPath, paths.planPath], {
+    cwd: unrelated,
+    timeout: 30_000
+  })).stdout);
+  assert.equal(prepared.status, "cover-generation-required");
+  assert.equal(prepared.target, join(paths.outputDir, "assets", "cover.png"));
+  assert.match(prepared.requestHash, /^[a-f0-9]{64}$/u);
+  await assert.rejects(readFile(staleReceipt), /ENOENT/);
+
+  await assert.rejects(
+    execFileAsync(process.execPath, [recordCover, paths.configPath, paths.manuscriptPath, paths.planPath], { cwd: unrelated, timeout: 30_000 }),
+    /COVER_ASSET_MISSING.*Generate it from cover-image-request\.json/i
+  );
+  await writeTestPng(prepared.target, { rgb: [24, 91, 126] });
+  const recorded = JSON.parse((await execFileAsync(process.execPath, [recordCover, paths.configPath, paths.manuscriptPath, paths.planPath], {
+    cwd: unrelated,
+    timeout: 30_000
+  })).stdout);
+  assert.equal(recorded.status, "cover-recorded");
+  assert.equal(recorded.asset, "assets/cover.png");
+  assert.match(recorded.assetHash, /^[a-f0-9]{64}$/u);
+
+  const validated = JSON.parse((await run(paths, "validate", [], { cwd: unrelated })).stdout);
+  assert.equal(validated.status, "pass");
+
+  const ready = JSON.parse((await execFileAsync(process.execPath, [prepareCover, paths.configPath, paths.manuscriptPath, paths.planPath], {
+    cwd: unrelated,
+    timeout: 30_000
+  })).stdout);
+  assert.equal(ready.status, "cover-ready");
+  assert.equal(ready.assetHash, recorded.assetHash);
+  await readFile(staleReceipt);
+});
+
+test("cover preparation rejects an occupied target without current generation provenance", async () => {
+  const root = await mkdtemp(join(tmpdir(), "frontend-textbooks-occupied-cover-"));
+  temporaryDirectories.push(root);
+  const paths = await writeBookProject(root, { writeRequest: false });
+  await assert.rejects(
+    execFileAsync(process.execPath, [prepareCover, paths.configPath, paths.manuscriptPath, paths.planPath], { timeout: 30_000 }),
+    /COVER_TARGET_OCCUPIED.*fresh artwork/i
+  );
+  await assert.rejects(readFile(join(paths.outputDir, "cover-image-request.json")), /ENOENT/);
 });
 
 test("pipeline failures preserve a compact machine-readable response", async () => {
@@ -156,7 +263,7 @@ test("model plan classifications compile into structured rendered treatments", a
   const plan = JSON.parse(await readFile(paths.planPath));
   const sourceBlockId = plan.classifications[0].sourceBlockId;
   plan.classifications[0] = { ...plan.classifications[0], role: "process", treatment: "diagram", rationale: "A sequence benefits from structure" };
-  plan.visuals.diagrams = [{ sourceBlockIds: [sourceBlockId], concept: "Deterministic flow", rationale: "Makes the sequence visible" }];
+  plan.visuals.diagrams = [diagramDecision([sourceBlockId], { title: "Deterministic flow" })];
   await writeFile(paths.planPath, JSON.stringify(plan));
   try {
     await run(paths, "verify", ["--tier", "affected"]);
@@ -167,7 +274,8 @@ test("model plan classifications compile into structured rendered treatments", a
   const report = JSON.parse(await readFile(join(paths.outputDir, ".verification", "render-report.json")));
   assert.equal(report.desktop.diagramCount, 1);
   const receipt = JSON.parse(await readFile(join(paths.outputDir, "book-plan-receipt.json")));
-  assert.deepEqual(receipt.diagrams[0], { sourceBlockIds: [sourceBlockId], concept: "Deterministic flow" });
+  assert.equal(receipt.diagrams[0].title, "Deterministic flow");
+  assert.deepEqual(receipt.diagrams[0].sourceBlockIds, [sourceBlockId]);
 });
 
 test("cache keys include output targets and URL-decoded local assets", async () => {
@@ -175,16 +283,18 @@ test("cache keys include output targets and URL-decoded local assets", async () 
   const assetDirectory = join(paths.outputDir, "assets");
   await mkdir(assetDirectory, { recursive: true });
   const assetPath = join(assetDirectory, "cover one.png");
-  await writeFile(assetPath, "first-cover-bytes");
+  await writeTestPng(assetPath, { rgb: [20, 80, 150] });
   const config = JSON.parse(await readFile(paths.configPath));
   config.coverImage = "assets/cover%20one.png";
   await writeFile(paths.configPath, JSON.stringify(config));
+  await refreshCoverRequest(paths);
 
   await run(paths);
   assert.equal(JSON.parse((await run(paths)).stdout).skipped, true);
   const alternatePdf = join(paths.outputDir, "alternate.pdf");
   assert.equal(JSON.parse((await run(paths, "build", ["--pdf", alternatePdf])).stdout).skipped, false);
-  await writeFile(assetPath, "changed-cover-bytes");
+  await writeTestPng(assetPath, { rgb: [190, 90, 40] });
+  await refreshCoverRequest(paths);
   assert.equal(JSON.parse((await run(paths, "build", ["--pdf", alternatePdf])).stdout).skipped, false);
 });
 
@@ -202,6 +312,8 @@ test("pipeline rejects encoded traversal and escaping asset symlinks before hash
     const paths = await fixture();
     const secret = join(paths.root, "secret.png");
     await writeFile(secret, "secret");
+    await rm(join(paths.outputDir, "cover.png"), { force: true });
+    await rm(join(paths.outputDir, "assets", "cover.png"), { force: true });
     await symlink(secret, join(paths.outputDir, "cover.png"));
     const config = JSON.parse(await readFile(paths.configPath));
     config.coverImage = "cover.png";
@@ -281,6 +393,21 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
   ].map((path) => readFile(path)));
   const reviewPath = join(paths.root, "aesthetic-review.json");
   const request = JSON.parse(await readFile(join(paths.outputDir, ".verification", "aesthetic-review-request.json")));
+  assert.equal(request.version, 2);
+  assert.deepEqual(request.resolved, {
+    theme: "technical",
+    bodyColumns: "text-single",
+    chapterOpeners: false,
+    coverRoute: "photo",
+    imagePolicy: "selective",
+    coverRequired: true
+  });
+  assert.equal(request.coverEvidence.asset, "assets/cover.png");
+  assert.equal(request.coverEvidence.assetHash, sha256(await readFile(join(paths.outputDir, "assets", "cover.png"))));
+  assert.equal(request.coverEvidence.route, "photo");
+  assert.match(request.coverEvidence.fullPage.path, /desktop-cover\.png$/u);
+  assert.match(request.coverEvidence.mobile.path, /mobile-cover\.png$/u);
+  assert.match(request.coverEvidence.thumbnailContactSheet.path, /contact-sheet\.png$/u);
   await writeFile(reviewPath, JSON.stringify({
     version: 1,
     requestHash: request.requestHash,
@@ -335,4 +462,19 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
     run(paths, "finalize", ["--tier", "full", "--aesthetic-review", reviewPath]),
     /requestHash does not match/i
   );
+
+  const changedConfig = JSON.parse(await readFile(paths.configPath));
+  changedConfig.selectedCoverRoute = "press";
+  changedPlan.aestheticReview.criteria.pop();
+  changedPlan.layout.coverRoute = "press";
+  await writeFile(paths.configPath, JSON.stringify(changedConfig));
+  await writeFile(paths.planPath, JSON.stringify(changedPlan));
+  await refreshCoverRequest(paths);
+  await assert.rejects(
+    run(paths, "finalize", ["--tier", "full", "--aesthetic-review", reviewPath]),
+    /requestHash does not match/i
+  );
+  const changedRequest = JSON.parse(await readFile(join(paths.outputDir, ".verification", "aesthetic-review-request.json")));
+  assert.equal(changedRequest.resolved.coverRoute, "press");
+  assert.notEqual(changedRequest.requestHash, request.requestHash);
 });

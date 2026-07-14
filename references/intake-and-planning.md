@@ -4,7 +4,7 @@
 
 - Infer book type from the source: textbook for instructional material, manual for procedural material, field guide for compact reference, coffee-table/editorial for evocative or image-led work.
 - Use the supplied author. Ask only when no reliable author is available before final export. Never invent an imprint.
-- Use diagrams freely. Use generated images when available and useful unless the user requests supplied images only, diagrams only, or a plain reader edition.
+- Use diagrams freely. A newly generated cover bitmap is mandatory for every edition, including plain readers and user-supplied-image projects. Additional generated interior images remain optional when useful.
 - Match a user-named theme or alias from `themes/index.mjs`; otherwise use `colbalt`.
 
 ## Content architecture
@@ -19,12 +19,16 @@ For missing headings, infer natural boundaries without summarizing prose away. K
 
 Identify processes, comparisons, hierarchies, systems, timelines, taxonomies, decisions, anatomy, exercises, tables, and strong image subjects. Classify only salient blocks in `book-plan.json`; ordinary prose needs no classification.
 
-For each proposed visual, state its job, grammar, source IDs, placement, and rationale. Generated art is atmosphere or explanation, never fabricated evidence.
+For each proposed visual, state its job, grammar, source IDs, placement, and rationale. Generated art is atmosphere or explanation, never fabricated evidence. A diagram decision also supplies bounded model-authored nodes, relationships, caption, and takeaway; grounding prose is not copied into display labels.
 
 ## Covers and section art
 
-For editorial, business, HBR-like, coffee-table, or visually led books, explore 4–5 materially different cover routes. Ensure title readability at thumbnail size, one dominant idea, clear author placement, and no generic title-page treatment.
+Every plan includes one manuscript-grounded `visuals.cover` subject, rationale, source IDs, focal point, unique `generationId`, and meaningful alt text. The bitmap must be generated specifically for the current manuscript, stored at the config-relative `coverImage` target, and contain no title, author, logo, or other typography. A CSS field, SVG, stock image, remote asset, interior image, or image from another book is not a valid cover.
+
+Explore all five materially different cover routes as useful, but require artwork in every route. Ensure title readability at thumbnail size, one dominant idea, clear author placement, intentional crop/safe area, and no generic title-page treatment. The final selected cover—not only the options board—is the release gate.
 
 Set `selectedCoverRoute` to `type`, `symbol`, `photo`, `minimal`, or `press`; the cover-options page and final cover use the same renderer. Use `themeOverrides` only for known palette keys and hex colors when adapting a preset without creating a new theme, for example `{"heading":"#003F88","accent":"#009C3B"}`.
 
-Use distinct assets for the cover and every illustrated part divider. Keep a coherent visual series while varying the manuscript-grounded subject. Obtain prompt templates and target crop guidance from the active theme module; do not duplicate prompt prose elsewhere.
+Use distinct assets for the cover and every illustrated part divider. Keep a coherent visual series while varying the manuscript-grounded subject. Obtain the executable prompt and target crop guidance from `cover-image-request.json`; its prose comes only from the active theme module. Stop if the image-generation tool is unavailable—there is no cover waiver or typographic fallback.
+
+Relative `outputDir` values resolve from the directory containing `book.json`. `outputHtml`, PDF, verification output, and local assets resolve within that normalized output directory; traversal and symlink escapes are rejected.

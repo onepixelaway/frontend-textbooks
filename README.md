@@ -13,6 +13,7 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 - **Print-Ready PDF Output** - Exports US Letter PDFs with page-safe CSS, printed backgrounds, and fixed-format designed pages.
 - **HTML First** - Produces a browser-readable HTML book before exporting the PDF, so the artifact stays inspectable and editable.
 - **Enforced Manuscript Preservation** - Tracks stable source blocks and fails verification below 90% coverage instead of merely estimating preservation.
+- **Original Cover Artwork on Every Run** - Requires a unique manuscript-grounded local bitmap, binds it to the active theme prompt and manuscript hash, and fails closed instead of falling back to a typographic cover.
 - **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, two-column reading pages, visual plates, model cards, diagrams, and chapter closers.
 - **Coffee-Table Feel When Appropriate** - Encourages image-led section dividers, spacious editorial pages, generated artwork, and strong cover routes when the manuscript calls for a more collectible book.
 - **Reusable Scaffold** - Includes a Markdown-to-book scaffold with cover options, browser-side pagination, chapter-close furniture, generated part images, mobile collapse behavior, and overflow assertions.
@@ -84,7 +85,7 @@ The skill file routes the agent to optional references only when needed:
 
 `STYLE_PRESETS.md`, `page-base.css`, `html-template.md`, and browser internals are not default reads; agents open them only when changing the corresponding implementation.
 
-Bundled commands resolve from the installed skill directory, so book inputs and outputs can remain in any workspace. Runtime packages are pinned in `package-lock.json`; the browser runner never installs tools on demand.
+Bundled commands resolve from the installed skill directory, so book inputs and outputs can remain in any workspace. Relative config paths resolve from `book.json`, not the shell working directory. Runtime packages are pinned in `package-lock.json`; the browser runner reuses installed or cached browsers first and installs into a persistent cache only as a logged final fallback.
 
 ## Usage
 
@@ -98,16 +99,22 @@ The skill will:
 
 1. Locate or ingest the manuscript.
 2. Infer a book structure that preserves the source text.
-3. Plan covers, chapter rhythm, diagrams, generated images, and interior tools.
-4. Generate a designed HTML book.
-5. Export a PDF from the same HTML.
-6. Verify page integrity, overflow, text preservation, generated assets, and mobile readability.
+3. Plan the cover subject, chapter rhythm, structured diagrams, generated images, and interior tools.
+4. Generate and record a unique manuscript-grounded cover bitmap using the active theme's canonical prompt.
+5. Generate a designed HTML book.
+6. Export a PDF from the same HTML.
+7. Verify page integrity, overflow, ordered text preservation, generated assets, cover evidence, and mobile readability.
 
 The public command surface is `scripts/book-pipeline.mjs`:
 
 ```bash
 # Generate stable source IDs for the model-authored plan.
 node scripts/book-pipeline.mjs inventory --config book.json --manuscript manuscript.md
+
+# Compile the canonical cover request, generate its target with an image tool,
+# then bind that exact bitmap to this manuscript and plan.
+node scripts/prepare-cover-image.mjs book.json manuscript.md book-plan.json
+node scripts/record-cover-image.mjs book.json manuscript.md book-plan.json
 
 # Deterministic build checks, without Chromium.
 node scripts/book-pipeline.mjs build --config book.json --manuscript manuscript.md --plan book-plan.json --tier fast
@@ -176,6 +183,8 @@ frontend-textbooks/
     book-pipeline.mjs
     book-contract.mjs
     build-html-book.mjs
+    prepare-cover-image.mjs
+    record-cover-image.mjs
     book-browser.mjs
     export-pdf.sh
     export-ready-pdf.sh
@@ -201,7 +210,11 @@ Frontend Textbooks treats books as designed systems:
 - Make diagrams explain before they decorate.
 - Own whitespace.
 - Avoid generic AI visual habits.
-- Use generated images only when they add clarity, pacing, atmosphere, or book-like richness.
+- Generate a unique manuscript-grounded cover image every time; use additional generated images when they add clarity, pacing, atmosphere, or book-like richness.
+
+## Migration to Plan v2
+
+Existing projects without original cover art now fail closed. Add a new local `coverImage` target to `book.json`, migrate `book-plan.json` to version 2 with a complete `visuals.cover` decision, run `prepare-cover-image.mjs`, generate the exact requested bitmap, and run `record-cover-image.mjs`. Depending on the first missing contract, the pipeline reports `coverImage is required`, `COVER_DECISION_REQUIRED`, `COVER_TARGET_OCCUPIED`, `COVER_REQUEST_MISSING`, `COVER_ASSET_MISSING`, or `COVER_GENERATION_RECEIPT_MISSING`. An occupied target is accepted only when its exact current request, receipt, and bytes already match; otherwise move/remove the legacy asset or choose a new path. There is no waiver for legacy type-only covers.
 
 ## Credits
 

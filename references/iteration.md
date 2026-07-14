@@ -6,7 +6,7 @@ Choose the smallest safe tier:
 - `affected`: desktop/print/mobile render verification and contact sheet, no PDF.
 - `full`: all rendered checks plus atomic PDF export and inspection.
 
-The pipeline hashes config, manuscript, plan, assets, and pipeline version. Matching inputs reuse valid prior output. Use `--force true` for toolchain changes or suspected cache defects.
+The pipeline hashes normalized config, manuscript, plan, resolved output targets, exact local assets, canonical cover request, cover generation receipt, theme, toolchain, and pipeline implementation. A relevant route/layout/asset change invalidates rendering and aesthetic evidence; matching inputs reuse only hash-verified prior output. Use `--force true` for toolchain changes or suspected cache defects.
 
 Read `iteration-context.json` after a run. It contains component-level change flags, changed source IDs, tier/status, and artifact locations; it intentionally excludes the manuscript and full HTML. On failure, use repair tasks, bounded source context, plan-selection IDs, and evidence paths rather than reloading global context. Validate the model's response with `book-contract.mjs validate-repairs` before editing.
 

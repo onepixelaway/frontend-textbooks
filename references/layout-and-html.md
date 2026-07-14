@@ -14,7 +14,7 @@ Use semantic HTML and the bundled scaffold for ordinary Markdown prose. Customiz
 
 ## Mobile
 
-Collapse multi-column frames to one readable flow. Remove internal fixed-height overflow. Hide repeated pagination-only headers. The screen version must not show desktop Letter sheets slicing continuous prose.
+Collapse multi-column frames to one readable flow. Remove internal fixed-height overflow. Hide repeated pagination-only headers. Browser-only controls use normal document flow on mobile and may never occlude manuscript text at any scroll position. The screen version must not show desktop Letter sheets slicing continuous prose.
 
 ## Exceptions
 

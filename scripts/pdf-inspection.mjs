@@ -2,6 +2,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
+import { canonicalPdfPagePath } from "./lib/pdf-page-images.mjs";
 
 function usage() {
   console.error("Usage: node scripts/pdf-inspection.mjs --pdf <book.pdf> --pages-dir <rendered-pages> --structure <pdf-structure.json> [--render-report render-report.json]");
@@ -84,7 +85,7 @@ function select(label, page, { fallback = null, required = false } = {}) {
   if (!Number.isInteger(number) || number < 1 || number > structure.pageCount) {
     throw new Error(`Render report semantic "${label}" must be an integer page between 1 and ${structure.pageCount}; received ${JSON.stringify(number)}`);
   }
-  const source = join(pagesDir, `pdf-page-${number}.png`);
+  const source = canonicalPdfPagePath(join(pagesDir, "pdf-page"), number);
   if (!existsSync(source)) throw new Error(`Rendered PDF page is missing: ${source}`);
   const output = join(selectedDir, `${safeName(label)}.png`);
   copyFileSync(source, output);

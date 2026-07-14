@@ -73,3 +73,73 @@ test("diagnostic and repair IDs remain unique when guard categories share a code
   const repairs = createRepairTasks(diagnostics);
   assert.equal(new Set(repairs.tasks.map((task) => task.failureId)).size, 2);
 });
+
+test("an early pagination abort keeps downstream evidence but emits only root repair tasks", () => {
+  const diagnostics = normalizeDiagnostics({
+    desktop: {
+      ready: false,
+      error: "Pagination stopped at an oversized atomic block",
+      diagnostics: {},
+      preflightOverflows: [{ page: "page-2", sourceBlockIds: ["source-p-long"] }],
+      missingTocTargets: [{ target: "chapter-4" }, { target: "chapter-5" }],
+      sourcePreservation: {
+        required: true,
+        threshold: 0.9,
+        ratio: 0.25,
+        blockRatio: 0.2,
+        failedBlockIds: ["source-p-later"]
+      },
+      requireDiagrams: true,
+      diagramCount: 0
+    }
+  });
+  assertContract("diagnostics", diagnostics);
+  const root = diagnostics.items.find((item) => item.code === "ATOMIC_BLOCK_OVERSIZE");
+  assert.ok(root?.actionable);
+  const derived = diagnostics.items.filter((item) => item.derived);
+  assert.deepEqual(new Set(derived.map((item) => item.code)), new Set(["READY_TIMEOUT", "TOC_TARGET_MISSING", "SOURCE_COVERAGE_LOW", "DIAGRAM_REQUIRED"]));
+  assert.ok(derived.every((item) => item.blockedBy.includes(root.id)));
+  assert.deepEqual(createRepairTasks(diagnostics).tasks.map((task) => task.code), ["ATOMIC_BLOCK_OVERSIZE"]);
+});
+
+test("reports all independent preflight overflows in one repair packet", () => {
+  const diagnostics = normalizeDiagnostics({
+    desktop: {
+      ready: false,
+      diagnostics: {},
+      preflightOverflows: [
+        { page: "chapter-1", sourceBlockIds: ["source-a"] },
+        { page: "chapter-3", sourceBlockIds: ["source-b"] },
+        { page: "chapter-5", sourceBlockIds: ["source-c"] }
+      ],
+      sourcePreservation: { required: false },
+      diagramCount: 1
+    }
+  });
+  const tasks = createRepairTasks(diagnostics).tasks;
+  assert.equal(tasks.length, 3);
+  assert.ok(tasks.every((task) => task.code === "ATOMIC_BLOCK_OVERSIZE"));
+  assert.deepEqual(tasks.flatMap((task) => task.sourceBlockIds).sort(), ["source-a", "source-b", "source-c"]);
+});
+
+test("the same preflight overflow across viewports produces one repair task", () => {
+  const overflow = { page: "chapter-2", sourceBlockIds: ["source-shared"] };
+  const report = { ready: false, diagnostics: {}, preflightOverflows: [overflow], sourcePreservation: { required: false }, diagramCount: 1 };
+  const tasks = createRepairTasks(normalizeDiagnostics({ desktop: report, print: report, mobile: report })).tasks;
+  assert.equal(tasks.length, 1);
+  assert.deepEqual(tasks[0].observedViewports, ["desktop", "mobile", "print"]);
+});
+
+test("genuine source and TOC failures stay actionable after readiness succeeds", () => {
+  const diagnostics = normalizeDiagnostics({
+    desktop: {
+      ready: true,
+      diagnostics: {},
+      missingTocTargets: [{ target: "chapter-2" }],
+      sourcePreservation: { required: true, threshold: 0.9, ratio: 0.7, blockRatio: 0.8 },
+      diagramCount: 1
+    }
+  });
+  assert.ok(diagnostics.items.every((item) => item.actionable && !item.derived));
+  assert.deepEqual(new Set(createRepairTasks(diagnostics).tasks.map((task) => task.code)), new Set(["TOC_TARGET_MISSING", "SOURCE_COVERAGE_LOW"]));
+});

@@ -5,6 +5,7 @@ import {
   realpathSync
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { sha256 } from "./content-hash.mjs";
 
 const MANIFEST_NAME = "book-build-manifest.json";
 function within(root, candidate) {
@@ -96,11 +97,21 @@ function readManifest(manifestPath) {
   } catch (error) {
     throw new Error(`Invalid ${MANIFEST_NAME}: ${error.message}`);
   }
-  if (!manifest || manifest.schemaVersion !== 1) {
-    throw new Error(`${MANIFEST_NAME} must declare schemaVersion 1`);
+  if (!manifest || ![1, 2].includes(manifest.schemaVersion)) {
+    throw new Error(`${MANIFEST_NAME} must declare schemaVersion 1 or 2`);
   }
   if (!Array.isArray(manifest.files)) {
     throw new Error(`${MANIFEST_NAME} files must be an array`);
+  }
+  if (manifest.schemaVersion === 2) {
+    if (!manifest.cover || typeof manifest.cover !== "object" || Array.isArray(manifest.cover)) {
+      throw new Error(`${MANIFEST_NAME} schemaVersion 2 must declare cover metadata`);
+    }
+    const asset = normalizeManifestPath(manifest.cover.asset, "manifest cover.asset");
+    if (!manifest.files.includes(asset)) throw new Error(`${MANIFEST_NAME} cover.asset must be included in files`);
+    if (!/^[a-f0-9]{64}$/u.test(manifest.cover.sha256 || "")) throw new Error(`${MANIFEST_NAME} cover.sha256 is invalid`);
+    if (!/^[a-f0-9]{64}$/u.test(manifest.cover.requestHash || "")) throw new Error(`${MANIFEST_NAME} cover.requestHash is invalid`);
+    if (!/^[a-f0-9]{64}$/u.test(manifest.cover.generationReceiptHash || "")) throw new Error(`${MANIFEST_NAME} cover.generationReceiptHash is invalid`);
   }
   return manifest;
 }
@@ -163,6 +174,13 @@ export function createStaticAssetContext(htmlPath) {
       for (const url of extractExplicitRemoteUrls(readFileSync(canonical, "utf8"))) {
         allowedRemoteUrls.add(url);
       }
+    }
+  }
+  if (manifest?.schemaVersion === 2) {
+    const coverPath = canonicalAllowedFile(rootReal, normalizeManifestPath(manifest.cover.asset, "manifest cover.asset"));
+    const actualHash = sha256(readFileSync(coverPath));
+    if (actualHash !== manifest.cover.sha256) {
+      throw new Error(`${MANIFEST_NAME} cover.sha256 does not match the exact rendered cover asset`);
     }
   }
   return {

@@ -884,8 +884,7 @@ th {
 }
 
 .book-controls {
-    position: sticky;
-    top: 0;
+    position: static;
     z-index: 100;
     display: flex;
     gap: 10px;
@@ -958,6 +957,11 @@ th {
 
 /* 10. Smaller browser preview */
 @media screen and (max-width: 920px) {
+    .book-controls {
+        top: auto;
+        backdrop-filter: none;
+    }
+
     .book-shell {
         padding: 16px 0;
     }

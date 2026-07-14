@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { cleanPdfPageImages, normalizePdfPageImages } from "./pdf-page-images.mjs";
 
 function commandResult(command, args) {
   return spawnSync(command, args, {
@@ -154,7 +155,135 @@ export function sourceTokenCoverage(blocks, actualText) {
   return sourceBlockCoverage(blocks, actualText).wordRatio;
 }
 
-export function validatePdfStructure(pdfPath, expectedPages = null, { requireText = false, sourceManifest = null } = {}) {
+export function sourceBlockPresence(blocks, actualText) {
+  const actualTokens = normalizedTokens(actualText);
+  const tokenPositions = new Map();
+  actualTokens.forEach((token, index) => {
+    const positions = tokenPositions.get(token[0]) ?? [];
+    positions.push(index);
+    tokenPositions.set(token[0], positions);
+  });
+  let matchedWords = 0;
+  let totalWords = 0;
+  let matchedBlocks = 0;
+  let totalBlocks = 0;
+  const missingBlockIds = [];
+  for (const [index, block] of blocks.entries()) {
+    const expectedTokens = normalizedTokens(block.expectedText ?? block.text);
+    totalWords += expectedTokens.length;
+    if (!expectedTokens.length) continue;
+    totalBlocks += 1;
+    if (sequenceIndex(actualTokens, tokenPositions, expectedTokens, 0) === -1) {
+      missingBlockIds.push(String(block.id ?? `block-${index + 1}`));
+      continue;
+    }
+    matchedBlocks += 1;
+    matchedWords += expectedTokens.length;
+  }
+  return {
+    blockRatio: totalBlocks ? Number((matchedBlocks / totalBlocks).toFixed(4)) : 0,
+    wordRatio: totalWords ? Number((matchedWords / totalWords).toFixed(4)) : 0,
+    matchedBlocks,
+    totalBlocks,
+    matchedWords,
+    totalWords,
+    missingBlockIds
+  };
+}
+
+function coverageScore(coverage) {
+  return [Math.min(coverage.blockRatio, coverage.wordRatio), coverage.blockRatio + coverage.wordRatio];
+}
+
+function strongerCoverage(left, right) {
+  const leftScore = coverageScore(left.coverage);
+  const rightScore = coverageScore(right.coverage);
+  return leftScore[0] !== rightScore[0] ? leftScore[0] > rightScore[0] : leftScore[1] > rightScore[1];
+}
+
+function missingBlockEvidence(blocks, ids, sourceTopology) {
+  const blocksById = new Map(blocks.map((block, index) => [String(block.id ?? `block-${index + 1}`), block]));
+  const pagesById = new Map((sourceTopology ?? []).map((item) => [String(item.id), item.pages ?? []]));
+  return ids.slice(0, 20).map((id) => ({
+    id,
+    expectedPages: pagesById.get(id) ?? [],
+    snippet: String(blocksById.get(id)?.expectedText ?? blocksById.get(id)?.text ?? "").replace(/\s+/gu, " ").trim().slice(0, 180)
+  }));
+}
+
+export function evaluatePdfTextCandidates(blocks, candidates, threshold = 0.9, sourceTopology = []) {
+  const evaluated = candidates
+    .filter((candidate) => String(candidate.text || "").trim())
+    .map((candidate) => ({
+      method: candidate.method,
+      coverage: sourceBlockCoverage(blocks, candidate.text),
+      presence: sourceBlockPresence(blocks, candidate.text)
+    }));
+  if (!evaluated.length) throw new Error("PDF text extraction produced no nonempty candidates");
+  let best = evaluated[0];
+  for (const candidate of evaluated.slice(1)) {
+    if (strongerCoverage(candidate, best)) best = candidate;
+  }
+  let bestPresence = evaluated[0];
+  for (const candidate of evaluated.slice(1)) {
+    if (strongerCoverage({ coverage: candidate.presence }, { coverage: bestPresence.presence })) bestPresence = candidate;
+  }
+  const passes = best.coverage.blockRatio >= threshold && best.coverage.wordRatio >= threshold;
+  const textIsPresent = bestPresence.presence.blockRatio >= threshold && bestPresence.presence.wordRatio >= threshold;
+  const code = passes ? null : (textIsPresent ? "PDF_READING_ORDER_MISMATCH" : "PDF_SOURCE_PRESERVATION_LOW");
+  return {
+    status: passes ? "pass" : "fail",
+    code,
+    method: best.method,
+    ratio: best.coverage.wordRatio,
+    threshold,
+    ...best.coverage,
+    lexicalPresence: bestPresence.presence,
+    candidates: evaluated.map((candidate) => ({
+      method: candidate.method,
+      blockRatio: candidate.coverage.blockRatio,
+      wordRatio: candidate.coverage.wordRatio,
+      presenceBlockRatio: candidate.presence.blockRatio,
+      presenceWordRatio: candidate.presence.wordRatio,
+      missingBlockIds: candidate.coverage.missingBlockIds.slice(0, 100)
+    })),
+    missingBlocks: missingBlockEvidence(blocks, best.coverage.missingBlockIds, sourceTopology)
+  };
+}
+
+function extractPdfTextCandidates(pdfPath) {
+  const modes = [
+    { method: "reading-order", args: [pdfPath, "-"] },
+    { method: "content-stream-order", args: ["-raw", pdfPath, "-"] },
+    { method: "physical-layout", args: ["-layout", pdfPath, "-"] }
+  ];
+  return modes.map(({ method, args }) => {
+    const extracted = commandResult("pdftotext", args);
+    assertCommandCompleted(extracted, `pdftotext (${method})`);
+    if (extracted.error?.code === "ENOENT") {
+      throw new Error("pdftotext is required to verify text-bearing PDFs; install Poppler and retry");
+    }
+    if (extracted.error) throw new Error(`Could not run pdftotext (${method}): ${extracted.error.message}`);
+    if (extracted.status !== 0) {
+      throw new Error(`pdftotext (${method}) rejected PDF output: ${(extracted.stderr || "unknown error").trim()}`);
+    }
+    return { method, text: extracted.stdout };
+  });
+}
+
+function textPreservationError(structure, preservation) {
+  const percentages = `blocks ${(preservation.blockRatio * 100).toFixed(1)}%, words ${(preservation.wordRatio * 100).toFixed(1)}%`;
+  const missing = preservation.missingBlocks.slice(0, 5).map((block) => `${block.id}${block.expectedPages.length ? ` (expected page${block.expectedPages.length === 1 ? "" : "s"} ${block.expectedPages.join(", ")})` : ""}: ${block.snippet}`).join(" | ");
+  const reason = preservation.code === "PDF_READING_ORDER_MISMATCH"
+    ? `PDF text is lexically present but no supported extraction mode preserves manuscript order (${percentages})`
+    : `PDF source preservation is below the ${(preservation.threshold * 100).toFixed(1)}% threshold (${percentages})`;
+  const error = new Error(`${preservation.code}: ${reason}${missing ? `. Missing-order evidence: ${missing}` : ""}`);
+  error.code = preservation.code;
+  error.report = { ...structure, status: "fail", textPreservation: preservation };
+  return error;
+}
+
+export function validatePdfStructure(pdfPath, expectedPages = null, { requireText = false, sourceManifest = null, sourceTopology = [] } = {}) {
   const structure = pdfStructureWithPdfinfo(pdfPath) ?? pdfStructureFromBytes(pdfPath);
   if (expectedPages !== null && structure.pageCount !== expectedPages) {
     throw new Error(`PDF page count ${structure.pageCount} does not match rendered page count ${expectedPages}`);
@@ -165,33 +294,25 @@ export function validatePdfStructure(pdfPath, expectedPages = null, { requireTex
     }
   });
   if (requireText) {
-    const extracted = commandResult("pdftotext", [pdfPath, "-"]);
-    assertCommandCompleted(extracted, "pdftotext");
-    if (extracted.error?.code === "ENOENT") {
-      throw new Error("pdftotext is required to verify text-bearing PDFs; install Poppler and retry");
-    }
-    if (extracted.error) {
-      throw new Error(`Could not run pdftotext: ${extracted.error.message}`);
-    }
-    if (!extracted.error && extracted.status !== 0) {
-      throw new Error(`pdftotext rejected PDF output: ${(extracted.stderr || "unknown error").trim()}`);
-    }
-    if (!extracted.error && !String(extracted.stdout || "").trim()) {
+    const candidates = extractPdfTextCandidates(pdfPath);
+    if (!candidates.some((candidate) => String(candidate.text || "").trim())) {
       throw new Error("PDF text extraction is empty for a text-bearing book");
     }
     if (sourceManifest?.blocks?.length) {
-      const coverage = sourceBlockCoverage(sourceManifest.blocks, extracted.stdout);
       const threshold = Number(sourceManifest.threshold) || 0.9;
-      if (coverage.blockRatio < threshold || coverage.wordRatio < threshold) {
-        throw new Error(`PDF source preservation is below the ${(threshold * 100).toFixed(1)}% threshold (blocks ${(coverage.blockRatio * 100).toFixed(1)}%, words ${(coverage.wordRatio * 100).toFixed(1)}%)`);
-      }
-      structure.textPreservation = { ratio: coverage.wordRatio, threshold, ...coverage };
+      const preservation = evaluatePdfTextCandidates(sourceManifest.blocks, candidates, threshold, sourceTopology);
+      structure.textPreservation = preservation;
+      if (preservation.status !== "pass") throw textPreservationError(structure, preservation);
     }
   }
-  return structure;
+  return { ...structure, status: "pass" };
 }
 
-export function renderPdfPages(pdfPath, outputPrefix) {
+export function renderPdfPages(pdfPath, outputPrefix, expectedPageCount) {
+  if (!Number.isInteger(expectedPageCount) || expectedPageCount < 1) {
+    throw new Error(`Expected PDF page count must be a positive integer: ${expectedPageCount}`);
+  }
+  cleanPdfPageImages(outputPrefix);
   const rendered = commandResult("pdftoppm", ["-png", pdfPath, outputPrefix]);
   assertCommandCompleted(rendered, "pdftoppm");
   if (rendered.error?.code === "ENOENT") {
@@ -201,6 +322,7 @@ export function renderPdfPages(pdfPath, outputPrefix) {
   if (rendered.status !== 0) {
     throw new Error(`pdftoppm rejected PDF output: ${(rendered.stderr || rendered.stdout || "unknown error").trim()}`);
   }
+  return normalizePdfPageImages(outputPrefix, expectedPageCount);
 }
 
 function sourceManifestFromHtml(htmlPath) {
@@ -232,6 +354,14 @@ function companionHtml(options) {
   return resolve(dirname(absoluteManifest), manifest.entry);
 }
 
+function sourceTopologyFromReport(reportPath) {
+  if (!reportPath) return [];
+  const report = JSON.parse(readFileSync(resolve(reportPath), "utf8"));
+  const topology = report?.print?.sourceBlockPages ?? report?.desktop?.sourceBlockPages ?? [];
+  if (!Array.isArray(topology)) throw new Error("Render report sourceBlockPages must be an array");
+  return topology;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   let cli;
   try {
@@ -242,6 +372,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
         html: { type: "string" },
         manifest: { type: "string" },
         "require-text": { type: "boolean" },
+        "render-report": { type: "string" },
         render: { type: "string" },
         report: { type: "string" }
       },
@@ -253,7 +384,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   }
   const pdfPath = cli.positionals[0];
   if (!pdfPath) {
-    console.error("Usage: node scripts/lib/pdf-structure.mjs <path-to-pdf> [--html index.html | --manifest book-build-manifest.json] [--require-text] [--render prefix] [--report report.json]");
+    console.error("Usage: node scripts/lib/pdf-structure.mjs <path-to-pdf> [--html index.html | --manifest book-build-manifest.json] [--render-report render-report.json] [--require-text] [--render prefix] [--report report.json]");
     process.exit(1);
   }
   try {
@@ -261,16 +392,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     const sourceManifest = htmlPath ? sourceManifestFromHtml(htmlPath) : null;
     const structure = validatePdfStructure(resolve(pdfPath), null, {
       requireText: Boolean(cli.values["require-text"] || sourceManifest),
-      sourceManifest
+      sourceManifest,
+      sourceTopology: sourceTopologyFromReport(cli.values["render-report"])
     });
     const outputPrefix = cli.values.render;
     if (outputPrefix) {
-      renderPdfPages(resolve(pdfPath), resolve(outputPrefix));
+      renderPdfPages(resolve(pdfPath), resolve(outputPrefix), structure.pageCount);
     }
     const reportPath = cli.values.report;
     if (reportPath) writeFileSync(resolve(reportPath), JSON.stringify(structure, null, 2));
     process.stdout.write(`${structure.pageCount}\n`);
   } catch (error) {
+    const reportPath = cli.values.report;
+    if (reportPath && error.report) writeFileSync(resolve(reportPath), JSON.stringify(error.report, null, 2));
     console.error(error.message);
     process.exit(2);
   }

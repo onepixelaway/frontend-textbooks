@@ -47,13 +47,10 @@ elif [[ -f "$PDF_DIR/index.html" ]]; then
   STRUCTURE_ARGS+=(--html "$PDF_DIR/index.html")
 fi
 
-find "$OUTPUT_DIR" -maxdepth 1 -type f -name 'pdf-page-*.png' -delete
 PAGE_COUNT=$(node "$SCRIPT_DIR/lib/pdf-structure.mjs" "${STRUCTURE_ARGS[@]}" --render "$OUTPUT_DIR/pdf-page")
-RENDERED_COUNT=$(find "$OUTPUT_DIR" -maxdepth 1 -type f -name 'pdf-page-*.png' | wc -l | tr -d ' ')
-if [[ "$RENDERED_COUNT" != "$PAGE_COUNT" ]]; then
-  echo "Rendered $RENDERED_COUNT PDF page(s), expected $PAGE_COUNT." >&2
-  exit 2
-fi
+# pdf-structure.mjs owns canonical page discovery, stale cleanup, Poppler
+# padding normalization, and completeness validation. Do not repeat those
+# rules here with a broader filename glob.
 
 bash "$SCRIPT_DIR/run-book-browser.sh" contact-sheet --input-dir "$OUTPUT_DIR" --output "$OUTPUT_DIR/contact-sheet.png" >/dev/null
 RENDER_REPORT=""
