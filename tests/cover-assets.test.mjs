@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 
 import { assertCoverAssetNotReused, coverFrameForConfig, inspectCoverBitmap, resolveRequiredCoverAsset } from "../scripts/lib/cover-assets.mjs";
-import { assertCoverGenerationReceiptFile, createCoverGenerationReceipt, createCoverImageRequest } from "../scripts/lib/cover-image-request.mjs";
+import { assertCoverGenerationReceiptFile, assertCoverImageRequestFile, createCoverGenerationReceipt, createCoverImageRequest } from "../scripts/lib/cover-image-request.mjs";
 import { coverDecision, pngBytes, writeTestPng } from "./helpers/fixture-assets.mjs";
 
 const temporaryDirectories = [];
@@ -32,15 +32,62 @@ test("a generated cover request uses the active theme's canonical template", asy
     },
     outputDir: paths.outputDir
   });
-  assert.equal(request.schemaVersion, 1);
+  assert.equal(request.schemaVersion, 2);
   assert.equal(request.manuscriptHash, manuscriptHash);
   assert.equal(request.targetAsset, "assets/cover.png");
   assert.match(request.prompt, /child arranging layered paper paths/i);
   assert.match(request.prompt, /no text, no logo/i);
   assert.match(request.prompt, /landscape crop 8\.5in × 7\.45in.*1275 × 1118 pixels/is);
   assert.doesNotMatch(request.prompt, /\[SUBJECT/);
+  assert.doesNotMatch(request.prompt, /\[COLOR PALETTE\]/);
   assert.doesNotMatch(request.prompt, /\[COVER ART CONSTRAINTS\]/);
+  assert.equal(request.palette.roles.page, "#FBFAF6");
+  assert.equal(request.palette.roles.heading, "#0A3695");
+  assert.match(request.prompt, /#FBFAF6/);
+  assert.match(request.prompt, /#0A3695/);
   assert.match(request.requestHash, /^[a-f0-9]{64}$/);
+});
+
+test("theme overrides replace the illustration palette and invalidate stale artwork requests", async () => {
+  const paths = await fixture();
+  const plan = {
+    manuscriptHash: "b".repeat(64),
+    theme: { id: "colbalt" },
+    layout: { coverRoute: "photo" },
+    visuals: { cover: coverDecision() }
+  };
+  const baseConfig = {
+    title: "A Book",
+    author: "Author",
+    style: "colbalt",
+    coverImage: "assets/cover.png",
+    selectedCoverRoute: "photo"
+  };
+  const base = createCoverImageRequest({ config: baseConfig, plan, outputDir: paths.outputDir });
+  const config = {
+    ...baseConfig,
+    themeOverrides: {
+      page: "#F6F0DE",
+      ink: "#17251E",
+      heading: "#245C3A",
+      accent: "#D68A2F",
+      soft: "#BFD8C6",
+      coverBand: "#183D2A"
+    }
+  };
+  const overridden = createCoverImageRequest({ config, plan, outputDir: paths.outputDir });
+
+  assert.deepEqual(overridden.palette.roles, config.themeOverrides);
+  for (const color of Object.values(config.themeOverrides)) assert.match(overridden.prompt, new RegExp(color, "i"));
+  assert.doesNotMatch(overridden.prompt, /monochrome cobalt blue|warm white palette|blue ink on paper/i);
+  assert.notEqual(overridden.requestHash, base.requestHash);
+
+  const requestPath = join(paths.outputDir, "cover-image-request.json");
+  await writeFile(requestPath, JSON.stringify(base));
+  assert.throws(
+    () => assertCoverImageRequestFile(requestPath, { config, plan, outputDir: paths.outputDir }),
+    /COVER_REQUEST_STALE/
+  );
 });
 
 test("required cover assets reject missing, remote, empty, corrupt, and low-resolution files", async () => {

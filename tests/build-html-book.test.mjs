@@ -292,22 +292,23 @@ test("theme overrides reject unknown keys and unsafe CSS values", async (t) => {
   });
 });
 
-test("selected cover route drives the final cover through the shared five-route renderer", async () => {
+test("selected cover route drives the final cover through the shared two-route renderer", async () => {
   const paths = await fixture({
     partImages: {},
     requirePartImages: false,
-    selectedCoverRoute: "symbol"
+    selectedCoverRoute: "minimal"
   });
   await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
   const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
   const options = await readFile(join(paths.outputDir, "cover-options.html"), "utf8");
 
-  assert.match(html, /class="page option-cover has-cover-art title-short cover route-symbol"[^>]*data-cover-route="symbol"/);
+  assert.match(html, /class="page option-cover has-cover-art title-short cover route-minimal"[^>]*data-cover-route="minimal"/);
   assert.doesNotMatch(html, /class="page cover"/);
-  assert.equal((options.match(/data-cover-route=/g) || []).length, 5);
-  for (const route of ["type", "symbol", "photo", "minimal", "press"]) {
+  assert.equal((options.match(/data-cover-route=/g) || []).length, 2);
+  for (const route of ["photo", "minimal"]) {
     assert.match(options, new RegExp(`data-cover-route="${route}"`));
   }
+  assert.doesNotMatch(options, /data-cover-route="(?:type|symbol|press)"/);
 });
 
 test("bullet-only chapters produce a useful opener summary", async () => {

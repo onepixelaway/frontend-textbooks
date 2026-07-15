@@ -47,6 +47,27 @@ test("model-authored contracts accept structured reasoning and reject prose-shap
   assert.equal(validateContract("book-plan", { ...plan, commentary: "free-form" }).valid, false);
 });
 
+test("book contracts support only photo and minimal cover routes", () => {
+  for (const route of ["photo", "minimal"]) {
+    assert.equal(validateContract("book-config", { title: "Book", author: "Author", coverImage: "assets/cover.png", selectedCoverRoute: route }).valid, true);
+    const plan = bookPlan({ manuscriptHash: "0".repeat(64), sourceBlockId: "source-1" });
+    plan.layout.coverRoute = route;
+    assert.equal(validateContract("book-plan", plan).valid, true);
+  }
+
+  for (const route of ["type", "symbol", "press"]) {
+    const config = validateContract("book-config", { title: "Book", author: "Author", coverImage: "assets/cover.png", selectedCoverRoute: route });
+    assert.equal(config.valid, false);
+    assert.match(config.errors.join("\n"), /selectedCoverRoute must be one of: photo, minimal/);
+
+    const plan = bookPlan({ manuscriptHash: "0".repeat(64), sourceBlockId: "source-1" });
+    plan.layout.coverRoute = route;
+    const result = validateContract("book-plan", plan);
+    assert.equal(result.valid, false);
+    assert.match(result.errors.join("\n"), /coverRoute must be one of: photo, minimal/);
+  }
+});
+
 test("artifact manifests use the strict v3 cover provenance and source-block coverage contract", () => {
   const manifest = {
     schemaVersion: 3,

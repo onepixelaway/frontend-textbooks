@@ -14,9 +14,9 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 - **HTML First** - Produces a browser-readable HTML book before exporting the PDF, so the artifact stays inspectable and editable.
 - **Enforced Manuscript Preservation** - Tracks stable source blocks and fails verification below 90% coverage instead of merely estimating preservation.
 - **Original Cover Artwork on Every Run** - Requires a unique manuscript-grounded local bitmap, binds it to the active theme prompt and manuscript hash, and fails closed instead of falling back to a typographic cover.
-- **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, two-column reading pages, visual plates, model cards, diagrams, and chapter closers.
+- **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, two-column reading pages, manuscript-grounded framework, scorecard, and numbers exhibits, diagrams, and chapter closers.
 - **Coffee-Table Feel When Appropriate** - Encourages image-led section dividers, spacious editorial pages, generated artwork, and strong cover routes when the manuscript calls for a more collectible book.
-- **Reusable Scaffold** - Includes a Markdown-to-book scaffold with cover options, browser-side pagination, chapter-close furniture, generated part images, mobile collapse behavior, and overflow assertions.
+- **Reusable Scaffold** - Includes a Markdown-to-book scaffold with focused Photo and Minimal cover options, browser-side pagination, chapter-close furniture, generated part images, mobile collapse behavior, and overflow assertions.
 - **Verification Scripts** - Provides Playwright-backed checks for readiness, allowlisted assets, source coverage, desktop/mobile overflow, every rendered page, and final PDF structure.
 - **Deterministic Pipeline** - One versioned command surface validates strict JSON contracts, caches content-addressed work, emits machine-readable diagnostics, and writes a final hash manifest.
 - **Model/Script Boundary** - Scripts own parsing and production mechanics; the model supplies compact plans, targeted repair decisions, exceptions, and aesthetic approval through schemas.
@@ -98,12 +98,13 @@ Use the frontend-textbooks skill to turn this manuscript into a print-ready PDF 
 The skill will:
 
 1. Locate or ingest the manuscript.
-2. Infer a book structure that preserves the source text.
-3. Plan the cover subject, chapter rhythm, structured diagrams, generated images, and interior tools.
-4. Generate and record a unique manuscript-grounded cover bitmap using the active theme's canonical prompt.
-5. Generate a designed HTML book.
-6. Export a PDF from the same HTML.
-7. Verify page integrity, overflow, ordered text preservation, generated assets, cover evidence, and mobile readability.
+2. Analyze its subject, tone, audience, and cultural context.
+3. Recommend a topic-aware color scheme alongside two alternatives, ask the user to choose, and pause until they answer.
+4. Infer a book structure that preserves the source text.
+5. Plan the cover subject, chapter rhythm, structured diagrams, generated images, and 2–4 skim-worthy full-page exhibits when the manuscript supports them.
+6. Generate and record a unique manuscript-grounded cover bitmap using the active theme's canonical prompt.
+7. Generate a designed HTML book and matching PDF.
+8. Verify page integrity, overflow, ordered text preservation, generated assets, cover evidence, and mobile readability.
 
 The public command surface is `scripts/book-pipeline.mjs`:
 
@@ -126,13 +127,13 @@ node scripts/book-pipeline.mjs verify --config book.json --manuscript manuscript
 node scripts/book-pipeline.mjs finalize --config book.json --manuscript manuscript.md --plan book-plan.json --tier full
 ```
 
-If the plan requires aesthetic review, the first full run returns `review-required`. Inspect every contact sheet, write schema-valid `aesthetic-review.json`, and rerun with `--aesthetic-review aesthetic-review.json`; unchanged rendering and PDF work are reused.
+If the plan requires aesthetic review, the first full run returns `review-required`. Inspect every contact sheet plus every desktop/mobile feature-page image, write schema-valid `aesthetic-review.json`, and rerun with `--aesthetic-review aesthetic-review.json`; unchanged rendering and PDF work are reused.
 
 Pipeline stdout is always one compact JSON object, including failures. Full evidence remains on disk; `render-report.json` uses `schemaVersion: 2` and reports only failed or partial source blocks instead of a successful per-block inventory.
 
 ## Included Styles
 
-The default style is the `colbalt` theme, a cobalt editorial system defined in `themes/colbalt`:
+Interactive runs recommend three manuscript-grounded color schemes and wait for the user's choice. The selected system is recorded in `book.json` with a registered base theme plus optional semantic color overrides. For direct or legacy configs without a style, the runtime fallback is `colbalt`, a cobalt editorial system defined in `themes/colbalt`:
 
 - Poppins-compatible local fallbacks for headings and labels by default
 - Halant-compatible local serif fallbacks for body copy by default
@@ -212,9 +213,9 @@ Frontend Textbooks treats books as designed systems:
 - Avoid generic AI visual habits.
 - Generate a unique manuscript-grounded cover image every time; use additional generated images when they add clarity, pacing, atmosphere, or book-like richness.
 
-## Migration to Plan v2
+## Migration to Plan v3
 
-Existing projects without original cover art now fail closed. Add a new local `coverImage` target to `book.json`, migrate `book-plan.json` to version 2 with a complete `visuals.cover` decision, run `prepare-cover-image.mjs`, generate the exact requested bitmap, and run `record-cover-image.mjs`. Depending on the first missing contract, the pipeline reports `coverImage is required`, `COVER_DECISION_REQUIRED`, `COVER_TARGET_OCCUPIED`, `COVER_REQUEST_MISSING`, `COVER_ASSET_MISSING`, or `COVER_GENERATION_RECEIPT_MISSING`. An occupied target is accepted only when its exact current request, receipt, and bytes already match; otherwise move/remove the legacy asset or choose a new path. There is no waiver for legacy type-only covers.
+Plan v3 adds required `visuals.featurePages`. Designed nonfiction should provide 2–4 grounded `framework`, `scorecard`, or `numbers` decisions; a manuscript that cannot support one uses an empty array plus a justified `waive-feature-pages` exception. Version 2 plans fail with `book-plan.version must be one of: 3` until migrated. Existing projects without original cover art still fail closed: add a local `coverImage` target and complete `visuals.cover`, then run `prepare-cover-image.mjs`, generate the exact requested bitmap, and run `record-cover-image.mjs`. There is no artwork-free waiver. The only supported cover routes are `photo` and `minimal`.
 
 ## Credits
 

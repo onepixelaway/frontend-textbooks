@@ -1,8 +1,10 @@
-const imagePromptTemplate = `[SUBJECT] in a sun-drenched pastel Mediterranean setting, editorial lifestyle photography, warm coastal villa atmosphere, peach and coral stucco walls, powder blue painted trim, cream and ivory surfaces, terracotta accents, tomato red details, soft sage greenery, bright clear daylight, strong natural sunlight, crisp but gentle shadows, airy high-key exposure.
+const imagePromptTemplate = `[SUBJECT] in a sun-drenched Mediterranean setting, editorial lifestyle photography, coastal villa atmosphere, strong natural sunlight, crisp but gentle shadows.
 
-Styled with tactile handmade textures: glazed ceramic vases, woven baskets, linen curtains, boucle or woven textiles, fresh flowers, citrus fruit, potted palms, sculptural plants, painted wood, matte stucco, subtle vintage decor. Calm luxurious vacation-house mood, optimistic 1970s resort aesthetic, modern boutique hotel styling, art-directed color palette, clean composition, one clear focal point, spacious negative space, elegant magazine editorial framing.
+[COLOR PALETTE]
 
-Photorealistic but slightly stylized, soft film grain, natural skin tones if people are present, refined color harmony, warm nostalgic summer atmosphere, cover-ready composition, crisp details, gentle depth of field, no text, no logo, no clutter, no dark moody lighting, no harsh black shadows, no neon colors, no futuristic elements.
+Styled with tactile handmade textures: glazed ceramic vases, woven baskets, linen curtains, boucle or woven textiles, fresh flowers, citrus fruit, potted palms, sculptural plants, painted wood, matte stucco, subtle vintage decor. Calm luxurious vacation-house mood, optimistic 1970s resort aesthetic, modern boutique hotel styling, clean composition, one clear focal point, spacious negative space, elegant magazine editorial framing.
+
+Photorealistic but slightly stylized, soft film grain, natural skin tones if people are present, refined color harmony, nostalgic summer atmosphere, cover-ready composition, crisp details, gentle depth of field, no text, no logo, no clutter, no colors outside the authoritative palette, no futuristic elements.
 
 [COVER ART CONSTRAINTS]`;
 
@@ -44,6 +46,7 @@ const alumniTheme = {
   },
   imagePrompt: {
     subjectPlaceholder: "[SUBJECT]",
+    palettePlaceholder: "[COLOR PALETTE]",
     constraintPlaceholder: "[COVER ART CONSTRAINTS]",
     coverArt: {
       frame: "8.5in x 7.45in with the default cover band; runtime requests resolve the configured crop",
@@ -53,7 +56,7 @@ const alumniTheme = {
     },
     guidance: [
       "Use this prompt template for the required manuscript-grounded cover artwork whenever the alumni theme is active.",
-      "The runtime replaces [SUBJECT] and [COVER ART CONSTRAINTS] from the validated plan and configured crop.",
+      "The runtime replaces [SUBJECT], [COLOR PALETTE], and [COVER ART CONSTRAINTS] from the validated plan, resolved theme colors, and configured crop.",
       "Keep HTML/CSS responsible for all cover typography; the bitmap must contain no title, author, or logo.",
       "Keep any divider images in the same editorial language while changing the subject and never reusing the cover bitmap."
     ],

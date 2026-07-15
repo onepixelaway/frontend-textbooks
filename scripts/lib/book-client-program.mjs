@@ -70,6 +70,119 @@ export function bookClientProgram() {
     return figure;
   }
 
+  function featureShell(feature) {
+    const page = document.createElement("section");
+    page.id = `feature-${feature.id}`;
+    page.className = `page feature-page ${feature.kind}-page${feature.title.length > 58 ? " feature-title-long" : ""}`;
+    page.dataset.verifyFeature = "true";
+    page.dataset.featureId = feature.id;
+    page.dataset.featureKind = feature.kind;
+    page.dataset.groundingSourceBlockIds = feature.sourceBlockIds.join(",");
+    page.setAttribute("aria-label", feature.title);
+
+    const inner = document.createElement("div");
+    inner.className = "page-inner";
+    appendText(inner, "p", "chapter-kicker no-indent", feature.eyebrow);
+    const header = document.createElement("header");
+    header.className = "feature-header";
+    appendText(header, "h1", "", feature.title);
+    appendText(header, "p", "feature-deck no-indent", feature.deck);
+    inner.appendChild(header);
+    page.appendChild(inner);
+    return { page, inner };
+  }
+
+  function frameworkFeatureNode(feature) {
+    const { page, inner } = featureShell(feature);
+    const grid = document.createElement("div");
+    grid.className = "framework-grid";
+    grid.setAttribute("role", "list");
+    feature.items.forEach((item, index) => {
+      const card = document.createElement("section");
+      card.className = "framework-item";
+      card.setAttribute("role", "listitem");
+      appendText(card, "span", "framework-number", String(index + 1).padStart(2, "0"));
+      appendText(card, "h2", "", item.label);
+      appendText(card, "p", "no-indent", item.detail);
+      grid.appendChild(card);
+    });
+    const footer = appendText(inner, "p", "framework-footer no-indent", feature.footer);
+    inner.insertBefore(grid, footer);
+    return page;
+  }
+
+  function scorecardFeatureNode(feature) {
+    const { page, inner } = featureShell(feature);
+    const grid = document.createElement("div");
+    grid.className = "scorecard-grid";
+    for (const side of feature.sides) {
+      const section = document.createElement("section");
+      section.className = "scorecard-side";
+      appendText(section, "h2", "", side.label);
+      appendText(section, "p", "scorecard-descriptor no-indent", side.descriptor);
+      const metrics = document.createElement("div");
+      metrics.className = "scorecard-metrics";
+      for (const metric of side.metrics) {
+        const row = document.createElement("div");
+        row.className = "scorecard-metric";
+        appendText(row, "strong", "", metric.value);
+        appendText(row, "span", "", metric.label);
+        metrics.appendChild(row);
+      }
+      section.appendChild(metrics);
+      grid.appendChild(section);
+    }
+    const verdict = document.createElement("p");
+    verdict.className = "scorecard-verdict no-indent";
+    appendText(verdict, "strong", "", feature.verdictLabel);
+    appendText(verdict, "span", "", feature.verdict);
+    inner.append(grid, verdict);
+    return page;
+  }
+
+  function numbersFeatureNode(feature) {
+    const { page, inner } = featureShell(feature);
+    const grid = document.createElement("div");
+    grid.className = "numbers-grid";
+    for (const panel of feature.panels) {
+      const section = document.createElement("section");
+      section.className = "numbers-panel";
+      appendText(section, "h2", "", panel.label);
+      const entries = document.createElement("div");
+      entries.className = "numbers-entries";
+      for (const entry of panel.entries) {
+        const row = document.createElement("div");
+        row.className = "numbers-entry";
+        appendText(row, "span", "numbers-entry-label", entry.label);
+        const bar = document.createElement("span");
+        bar.className = "numbers-bar";
+        bar.setAttribute("aria-hidden", "true");
+        const fill = document.createElement("i");
+        fill.className = "numbers-bar-fill";
+        fill.style.width = `${entry.barPercent}%`;
+        bar.appendChild(fill);
+        row.appendChild(bar);
+        appendText(row, "strong", "", entry.value);
+        entries.appendChild(row);
+      }
+      section.appendChild(entries);
+      grid.appendChild(section);
+    }
+    const highlight = document.createElement("p");
+    highlight.className = "numbers-highlight no-indent";
+    appendText(highlight, "strong", "", feature.highlight.value);
+    appendText(highlight, "span", "", feature.highlight.text);
+    inner.append(grid, highlight);
+    return page;
+  }
+
+  function featureNode(feature) {
+    if (feature.kind === "framework") return frameworkFeatureNode(feature);
+    if (feature.kind === "scorecard") return scorecardFeatureNode(feature);
+    if (feature.kind === "numbers") return numbersFeatureNode(feature);
+    throw new Error("Unsupported feature page kind: " + feature.kind);
+  }
+
   function blockNodes(block) {
     const prose = sourceNode(block);
     const diagram = block.plan?.diagram;
@@ -387,6 +500,7 @@ export function bookClientProgram() {
     if (lastPage && lastFrame) {
       composeTailPage(chapter, pages);
     }
+    for (const feature of chapter.featurePages || []) mount.appendChild(featureNode(feature));
   }
 
   function addPageNumbers() {

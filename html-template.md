@@ -444,70 +444,24 @@ Design rules:
 - If the user explicitly requests chapter-opening spreads, mark the spread pages with `data-allow-opening-spread="true"` so verification can distinguish intentional spreads from accidental filler.
 - The default cobalt editorial palette fits intellectual business and field-guide prompts; adapt the palette only when the brief calls for a different aesthetic.
 
-## Signature Interior Tool Pages
+## Signature Skim Pages
 
-For business, strategy, instructional, field-guide, workbook, HBR-like, or analytical books, add a small system of designed interior tools when the manuscript supports it. These pages should feel reusable and ownable, not like generic sidebars.
+The deterministic builder renders three structured `visuals.featurePages` grammars:
 
-Recommended page types:
+- `framework` → `.feature-page.framework-page`: 3–6 numbered lenses, steps, criteria, or portable prompts plus a closing axis/footer.
+- `scorecard` → `.feature-page.scorecard-page`: exactly two entities, 2–4 comparable metrics per side, and a source-faithful verdict strip.
+- `numbers` → `.feature-page.numbers-page`: 2–4 two-entry statistical panels with bounded bars and one qualified highlight.
 
-- `.canvas-page`: a framework/canvas spread with labeled zones, short prompts, and generous whitespace.
-- `.model-card-page`: chapter-ending or part-ending cards that translate source ideas into compact reusable models.
-- `.anatomy-page`: an annotated failure/case/object/process page that labels visible action, hidden dynamic, failure point, and prepared move.
-
-Pattern:
-
-```html
-<section class="page canvas-page" aria-label="Framework canvas">
-  <div class="page-inner">
-    <p class="chapter-kicker no-indent">Field tool</p>
-    <h1>Reusable Canvas Title</h1>
-    <p class="tool-intro no-indent">One source-faithful sentence explaining when to use the canvas.</p>
-    <div class="canvas-grid">
-      <section><span>01</span><h2>Zone label</h2><p>Short prompt grounded in the manuscript.</p></section>
-      <section><span>02</span><h2>Zone label</h2><p>Short prompt grounded in the manuscript.</p></section>
-      <section><span>03</span><h2>Zone label</h2><p>Short prompt grounded in the manuscript.</p></section>
-      <section><span>04</span><h2>Zone label</h2><p>Short prompt grounded in the manuscript.</p></section>
-    </div>
-  </div>
-</section>
-
-<section class="page model-card-page" aria-label="Chapter model cards">
-  <div class="page-inner">
-    <p class="chapter-kicker no-indent">Chapter models</p>
-    <h1>Models To Reuse</h1>
-    <div class="model-card-grid">
-      <article><p class="model-label no-indent">Core model</p><h2>Model name</h2><p>Concise source-faithful description.</p></article>
-      <article><p class="model-label no-indent">Failure mode</p><h2>What goes wrong</h2><p>Concise source-faithful description.</p></article>
-      <article><p class="model-label no-indent">Prepared move</p><h2>What to do</h2><p>Concise source-faithful description.</p></article>
-    </div>
-  </div>
-</section>
-
-<section class="page anatomy-page" aria-label="Annotated failure anatomy">
-  <div class="page-inner">
-    <p class="chapter-kicker no-indent">Failure anatomy</p>
-    <h1>Scenario Or Object Being Annotated</h1>
-    <div class="anatomy-layout">
-      <figure class="anatomy-figure" aria-label="Annotated diagram or scenario">
-        <!-- SVG, image, or structured diagram here. -->
-      </figure>
-      <aside class="anatomy-notes">
-        <p><strong>Visible:</strong> What everyone sees.</p>
-        <p><strong>Hidden:</strong> The underlying dynamic.</p>
-        <p><strong>Failure:</strong> Where the unprepared version breaks.</p>
-        <p><strong>Move:</strong> The prepared response.</p>
-      </aside>
-    </div>
-  </div>
-</section>
-```
+The plan supplies a unique ID, chapter anchor, grounding source IDs, eyebrow, title, deck, bounded grammar-specific content, and rationale. The renderer supplies semantic HTML, theme variables, Letter geometry, page numbering, responsive collapse, verification markers, and screenshot evidence. It places each feature after the chapter containing its anchor, without removing or reordering any manuscript block.
 
 Design guidance:
 
-- Use these pages to duplicate and clarify ideas, never to replace manuscript paragraphs.
-- Keep labels short, concrete, and transferable. The same class names should work for a business canvas, recipe workflow, architecture anatomy, or study guide.
-- Use whitespace, rules, numbers, and arrows before adding boxes inside boxes.
-- Render the final PDF pages and inspect them visually; these tool pages are art-directed and must not clip.
+- Use 2–4 skim pages in substantial designed nonfiction when the manuscript supports them; vary the grammar.
+- Condense and clarify the source, never transcribe entire paragraphs or fabricate comparisons.
+- Keep labels short, concrete, and transferable. Use hierarchy, rules, large numerals, measured bars, and whitespace before boxes inside boxes.
+- Treat the full page as one editorial composition rather than a dashboard.
+- Inspect every feature at Letter, contact-sheet thumbnail, and 390px mobile sizes; the final PDF page must not clip.
+- Custom feature grammars may still use `data-verify-feature`, but supported pages belong in the strict plan contract instead of a post-build HTML injector.
 
 ## Diagram Grammar
 
@@ -843,15 +797,12 @@ Do not force a 30,000-word manuscript into manually designed fixed pages unless 
 
 ## Cover Options Pattern
 
-For every completed book, create `cover-options.html` as the pre-final cover review step. Use the exact required bitmap plus actual title, subtitle, author, and optional supplied publisher/imprint. Render all five distinct routes, not minor variations. There is no plain/type-only opt-out.
+For every completed book, create `cover-options.html` as the pre-final cover review step. Use the exact required bitmap plus actual title, subtitle, author, and optional supplied publisher/imprint. Render both supported routes as materially different compositions. There is no artwork-free opt-out.
 
 Recommended routes:
 
-- `cover-route-type`: oversized title typography paired with a substantial artwork field.
-- `cover-route-symbol`: conceptual mark layered with or adjacent to meaningful artwork.
 - `cover-route-photo`: the artwork leads, with HTML type integrated into the composition.
 - `cover-route-minimal`: high-contrast restrained type and a deliberately cropped artwork field with generous negative space.
-- `cover-route-press`: disciplined imprint/series typography plus one memorable artwork crop.
 
 Thumbnail test:
 

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version", "manuscriptHash", "editorial", "theme", "layout", "visuals", "classifications", "exceptions", "aestheticReview"],
   "properties": {
-    "version": { "type": "integer", "enum": [2] },
+    "version": { "type": "integer", "enum": [3] },
     "manuscriptHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "editorial": {
       "type": "object", "additionalProperties": false,
@@ -32,13 +32,13 @@
       "properties": {
         "bodyColumns": { "type": "string", "enum": ["text-two", "text-single", "text-three"] },
         "chapterOpeners": { "type": "boolean" },
-        "coverRoute": { "type": "string", "enum": ["type", "symbol", "photo", "minimal", "press"] },
+        "coverRoute": { "type": "string", "enum": ["photo", "minimal"] },
         "rationale": { "type": "string", "minLength": 1 }
       }
     },
     "visuals": {
       "type": "object", "additionalProperties": false,
-      "required": ["policy", "cover", "diagrams", "images"],
+      "required": ["policy", "cover", "diagrams", "featurePages", "images"],
       "properties": {
         "policy": { "type": "string", "enum": ["selective", "image-led"] },
         "cover": {
@@ -99,6 +99,90 @@
             }
           }
         },
+        "featurePages": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "kind", "anchorSourceBlockId", "sourceBlockIds", "eyebrow", "title", "deck", "rationale"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+              "kind": { "type": "string", "enum": ["framework", "scorecard", "numbers"] },
+              "anchorSourceBlockId": { "type": "string", "minLength": 1 },
+              "sourceBlockIds": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+              "eyebrow": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "title": { "type": "string", "minLength": 1, "maxLength": 90 },
+              "deck": { "type": "string", "minLength": 1, "maxLength": 240 },
+              "items": {
+                "type": "array", "minItems": 3, "maxItems": 6,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["label", "detail"],
+                  "properties": {
+                    "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+                    "detail": { "type": "string", "minLength": 1, "maxLength": 140 }
+                  }
+                }
+              },
+              "footer": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "sides": {
+                "type": "array", "minItems": 2, "maxItems": 2,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["label", "descriptor", "metrics"],
+                  "properties": {
+                    "label": { "type": "string", "minLength": 1, "maxLength": 48 },
+                    "descriptor": { "type": "string", "minLength": 1, "maxLength": 90 },
+                    "metrics": {
+                      "type": "array", "minItems": 2, "maxItems": 4,
+                      "items": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["value", "label"],
+                        "properties": {
+                          "value": { "type": "string", "minLength": 1, "maxLength": 24 },
+                          "label": { "type": "string", "minLength": 1, "maxLength": 80 }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "verdictLabel": { "type": "string", "minLength": 1, "maxLength": 12 },
+              "verdict": { "type": "string", "minLength": 1, "maxLength": 220 },
+              "panels": {
+                "type": "array", "minItems": 2, "maxItems": 4,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["label", "entries"],
+                  "properties": {
+                    "label": { "type": "string", "minLength": 1, "maxLength": 64 },
+                    "entries": {
+                      "type": "array", "minItems": 2, "maxItems": 2,
+                      "items": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["label", "value", "barPercent"],
+                        "properties": {
+                          "label": { "type": "string", "minLength": 1, "maxLength": 32 },
+                          "value": { "type": "string", "minLength": 1, "maxLength": 24 },
+                          "barPercent": { "type": "number", "minimum": 0, "maximum": 100 }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "highlight": {
+                "type": "object", "additionalProperties": false,
+                "required": ["value", "text"],
+                "properties": {
+                  "value": { "type": "string", "minLength": 1, "maxLength": 24 },
+                  "text": { "type": "string", "minLength": 1, "maxLength": 220 }
+                }
+              },
+              "rationale": { "type": "string", "minLength": 1, "maxLength": 600 }
+            }
+          }
+        },
         "images": {
           "type": "array",
           "items": {
@@ -133,7 +217,7 @@
         "type": "object", "additionalProperties": false,
         "required": ["rule", "scope", "rationale"],
         "properties": {
-          "rule": { "type": "string", "enum": ["allow-flowing-prose", "waive-diagrams", "waive-part-images", "allow-image-only", "allow-remote-fonts"] },
+          "rule": { "type": "string", "enum": ["allow-flowing-prose", "waive-diagrams", "waive-feature-pages", "waive-part-images", "allow-image-only", "allow-remote-fonts"] },
           "scope": { "type": "string", "minLength": 1 },
           "rationale": { "type": "string", "minLength": 1 }
         }

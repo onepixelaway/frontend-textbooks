@@ -117,6 +117,10 @@ const reportFailureRules = [
     failed: (report) => report.requireDiagrams && reportCount(report, "diagramElements") === 0,
     message: () => "required diagram policy is enabled, but no diagrams or diagram-like tools were found"
   },
+  {
+    failed: (report) => report.requireFeaturePages && reportCount(report, "featurePageCount") === 0,
+    message: () => "required feature-page policy is enabled, but no full-page editorial exhibits were found"
+  },
   ...REPORT_CHECKS.slice(10).map(({ field, message }) => countFailure(field, message))
 ];
 

@@ -1,14 +1,14 @@
 # Book Style Presets
 
-Use these as starting points only when the user mentions style/aesthetic, asks for visual directions, or the manuscript clearly needs a non-default treatment. Otherwise use the default editorial style below. The goal is not a theme pasted on top of text; it is a coherent book system.
+Use these as starting points for the three manuscript-grounded color-scheme choices presented after analysis. The interactive workflow never applies one silently: recommend a scheme, show two credible alternatives, and wait for the user's choice. The goal is not a theme pasted on top of text; it is a coherent book system.
 
 Avoid generic AI aesthetics: purple gradients, identical cards, centered everything, system-font blandness, and decoration that fights the prose.
 
-## Default Colbalt Editorial Theme
+## Colbalt Editorial Theme
 
 The scaffold source of truth for this default is [themes/colbalt/index.mjs](themes/colbalt/index.mjs). Keep font stacks, color tokens, and the generated-image prompt synchronized there first; this section documents the design language for agents and manual builds.
 
-**Use by default when:** the user supplies a manuscript without mentioning style, aesthetic, or a named visual reference.
+**Recommend when:** analytical, instructional, or comparative material benefits from a crisp cobalt hierarchy and warm neutral paper. It remains the runtime fallback for legacy or direct configs that omit `style`, not an automatic interactive selection.
 
 **Typography**
 
@@ -73,7 +73,7 @@ Use `themes/colbalt/index.mjs` as the sole source for `imagePrompt.template`, cr
 
 ## Alumni Theme
 
-The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt uses sunlit pastel Mediterranean editorial photography with a restrained focal composition.
+The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt uses sunlit Mediterranean editorial photography with a restrained focal composition; runtime palette compilation supplies the selected colors.
 
 ## 1. Scholarly Marginalia
 
@@ -306,15 +306,15 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 
 **Signature elements**
 
-- Generated editorial plates for major part dividers. Every cover route must visibly integrate the required bitmap; type-led and concept-led routes still use the art as a meaningful compositional field rather than an incidental sliver.
-- Cover sprint required: create all five routes, varying the relationship between the same required art, typography, concept marks, full-bleed treatment, and restrained press/imprint system.
+- Generated editorial plates for major part dividers. Both cover routes must visibly integrate the required bitmap as a meaningful compositional field.
+- Cover sprint required: create the Photo and Minimal routes, varying the relationship between the same required art, typography, crop, contrast, and negative space.
 - Cover typography should feel like a designed object: extreme scale, condensed sans, expressive serif, mixed weight, or deliberate tracking. Avoid default Georgia/Times cover titles unless heavily customized.
 - The title must read at thumbnail size. Test the chosen cover at around 100px wide before finalizing.
 - Treat the selected route as the final-cover blueprint. The exported PDF cover should not gain unrelated middle marks, altered scale, or a different image crop after route selection.
 - Include the author on the cover and title page. Include a publisher/imprint only when supplied.
 - Cobalt headline hierarchy, editorial-blue decks, muted metadata, and faded-blue analytical rules
 - Mix of spacious single-column essays, measured two-column analysis pages, and compact three-column field-guide/checklist pages
-- Add signature interior tools where the manuscript supports them: a reusable canvas/framework spread, chapter-ending model cards, and one annotated failure/anatomy page. These should feel like designed editorial artifacts a reader would photograph or reuse, not generic callout boxes.
+- Add 2–4 structured `framework`, `scorecard`, or `numbers` pages where the manuscript supports them. They should feel like designed editorial artifacts a reader would photograph or reuse, not generic callout boxes or dashboards.
 - Important chapter openings should often become two-page editorial spreads: large lowered serif title and either a spacious diagram or a text-led deck on the left; reduced two-column excerpt, airy line spacing, wide gutter, and large pull quote on the right. Continue the remaining manuscript afterward rather than dropping text, and resume with a quiet continuation header rather than repeating the full title immediately.
 - Dense analytical chapters should use `.page.text-page.text-two` body pages by default with generous side margins and a visible 0.5in+ gutter; a full-width single column is only acceptable when deliberately narrowed with generous margins
 - Medium-short final continuation pages should become `.text-stack` pages: two stacked bands of small columns with a clear reading path and a bottom anchor. Very short finals should become `.text-tail` single-column closers with a restrained rule, quote, or note. Do not leave two small columns stranded at the top of an otherwise empty sheet.

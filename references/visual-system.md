@@ -20,14 +20,16 @@ Give every exhibit an internal premise/title, clear reading order, manuscript vo
 
 Plan diagrams as bounded editorial apparatus: 2–6 concise nodes, explicit relationships when the grammar requires them, caption, takeaway, and source grounding. The renderer inserts the figure next to the exact original prose; it never turns source sentences into labels or replaces the paragraph. All atomic diagrams are measured together before normal pagination so independent oversize failures arrive in one repair packet.
 
-## Signature tools
+## Signature skim pages
 
-When supported by analytical material, add a reusable framework/canvas, chapter-ending model cards, and an annotated failure/anatomy page. Keep them additive and source-faithful. They must feel like designed artifacts, not generic boxed callouts.
+Designed nonfiction should break prose rhythm with 2–4 manuscript-grounded full-page exhibits when supported. Use a `framework` page for portable lenses or steps, a `scorecard` for a two-sided case with directly comparable metrics, and a `numbers` page for a small set of honest comparative measures plus a qualified takeaway. Prefer more than one grammar rather than repeating the same card grid.
+
+Keep these pages additive and source-faithful: display copy is a bounded model-authored condensation, while every original source block remains in order. The renderer places each exhibit after its grounded chapter and owns Letter/mobile layout. Use the page's eyebrow, title, deck, rules, numerals, metrics, bars, verdict/highlight, and whitespace as one composition; do not turn it into a dashboard of boxed widgets.
 
 ## Images
 
-Use manuscript-grounded prompts, deliberate crops, meaningful alt text, and adequate print resolution. Keep exact small text in HTML/SVG. The required cover bitmap must reach at least 150 effective DPI after the actual configured crop (8.5 × 7.45 inches with the default band); diagnostics report pixels, crop dimensions, and effective DPI. Never reuse cover art inside the book or repeat one divider image across parts, even under a copied filename.
+Use manuscript-grounded prompts, deliberate crops, meaningful alt text, and adequate print resolution. Keep exact small text in HTML/SVG. Use the compiled `palette.instruction` from `cover-image-request.json` for the cover and every additional illustration; change subjects, not the selected color system. The required cover bitmap must reach at least 150 effective DPI after the actual configured crop (8.5 × 7.45 inches with the default band); diagnostics report pixels, crop dimensions, and effective DPI. Never reuse cover art inside the book or repeat one divider image across parts, even under a copied filename.
 
 ## Cover gate
 
-All `type`, `symbol`, `photo`, `minimal`, and `press` routes visibly integrate the exact required bitmap. The final cover must match the selected route's composition, crop, focal point, hierarchy, metadata placement, contrast, and negative space at Letter size, contact-sheet thumbnail size, and 390px mobile width. Long titles must not break ordinary words mid-word; browser geometry must show no overlap, clipping, overflow, hidden focal subject, or content-obscuring controls. Compare the selected option, final render, mobile evidence, contact sheet, and manifest hash before approval.
+Both `photo` and `minimal` visibly integrate the exact required bitmap. The final cover must match the selected route's composition, crop, focal point, hierarchy, metadata placement, contrast, and negative space at Letter size, contact-sheet thumbnail size, and 390px mobile width. Long titles must not break ordinary words mid-word; browser geometry must show no overlap, clipping, overflow, hidden focal subject, or content-obscuring controls. Compare the selected option, final render, mobile evidence, contact sheet, and manifest hash before approval.

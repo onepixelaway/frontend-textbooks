@@ -107,7 +107,7 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       if (artBounds && copyBounds && intersects(artBounds, copyBounds) && Math.min(artBounds.bottom, copyBounds.bottom) - Math.max(artBounds.top, copyBounds.top) > tolerance) {
         failures.push({ reason: "Cover artwork collides with the typography band" });
       }
-      const decoration = cover.querySelector(".route-symbol-mark, .route-minimal-mark, .route-press-series");
+      const decoration = cover.querySelector(".route-minimal-mark");
       if (decoration && titleBounds && intersects(decoration.getBoundingClientRect(), titleBounds)) {
         failures.push({ reason: "Cover route decoration collides with the title" });
       }
@@ -200,6 +200,17 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       if (attrPolicy !== null) return attrPolicy;
 
       const dataPolicy = explicitBoolean(embeddedBookData().requireDiagrams);
+      if (dataPolicy !== null) return dataPolicy;
+
+      return false;
+    }
+
+    function requiresFeaturePages() {
+      const policyNode = document.querySelector("[data-require-feature-pages]");
+      const attrPolicy = explicitBoolean(policyNode?.dataset.requireFeaturePages);
+      if (attrPolicy !== null) return attrPolicy;
+
+      const dataPolicy = explicitBoolean(embeddedBookData().requireFeaturePages);
       if (dataPolicy !== null) return dataPolicy;
 
       return false;
@@ -847,6 +858,8 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       }
     });
     const requireDiagrams = requiresDiagrams();
+    const requireFeaturePages = requiresFeaturePages();
+    const featurePages = [...document.querySelectorAll(featureSelector)];
     const preflightOverflows = Array.isArray(window.__BOOK_PREFLIGHT_OVERFLOWS) ? window.__BOOK_PREFLIGHT_OVERFLOWS : [];
     const text = document.body.innerText.replace(/\s+/g, " ").trim();
     const pageText = normalizeText(pages.map((page) => page.innerText || page.textContent).join(" "));
@@ -893,6 +906,8 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       duplicatePartDividerAssets,
       requirePartImages,
       requireDiagrams,
+      requireFeaturePages,
+      featurePageCount: featurePages.length,
       preflightOverflows,
       diagramElements,
       diagramCount: diagramElements.length,
@@ -914,6 +929,6 @@ export async function collectRenderedReport({ limits, diagnostics, featureSelect
       customBookFailures,
       sourcePreservation,
       words: text ? text.split(/\s+/).length : 0,
-      customPages: [...document.querySelectorAll(featureSelector)].map((node) => node.id || node.getAttribute("aria-label") || "custom-feature")
+      customPages: featurePages.map((node) => node.id || node.getAttribute("aria-label") || "custom-feature")
     };
 }

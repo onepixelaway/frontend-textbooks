@@ -1,10 +1,12 @@
-const imagePromptTemplate = `[SUBJECT / SCENE] in a minimal conceptual editorial illustration style, monochrome cobalt blue and warm white palette, quiet intellectual atmosphere, spacious composition with large areas of negative space.
+const imagePromptTemplate = `[SUBJECT / SCENE] in a minimal conceptual editorial illustration style, quiet intellectual atmosphere, spacious composition with large areas of negative space.
 
-Use expressive blue ink brushwork, dry-brush streaks, layered screenprint texture, fine contour-line patterns, fingerprint-like wave forms, and soft painterly gradients. Blend a lightly realistic human figure or object with abstract flowing visual metaphors of thought, knowledge, writing, data, memory, or creative process.
+[COLOR PALETTE]
 
-Composition should feel calm, sparse, and magazine-editorial: one clear focal subject, surrounded by oversized abstract marks, paper-like forms, flowing ribbons, circular brush loops, or stacked document shapes. Warm off-white paper background, visible canvas/paper grain, subtle ink bleed, imperfect handmade edges, high contrast but soft overall mood.
+Use expressive ink brushwork, dry-brush streaks, layered screenprint texture, fine contour-line patterns, fingerprint-like wave forms, and soft painterly gradients. Blend a lightly realistic human figure or object with abstract flowing visual metaphors of thought, knowledge, writing, data, memory, or creative process.
 
-Elegant, poetic, restrained, modern, contemplative, tactile, printmaking-inspired, riso poster aesthetic, blue ink on paper, no text, no logo, no bright colors, no photorealism, no busy background, no multi-panel grid, no collage of separate images.
+Composition should feel calm, sparse, and magazine-editorial: one clear focal subject, surrounded by oversized abstract marks, paper-like forms, flowing ribbons, circular brush loops, or stacked document shapes. Visible canvas/paper grain, subtle ink bleed, imperfect handmade edges, high contrast but soft overall mood.
+
+Elegant, poetic, restrained, modern, contemplative, tactile, printmaking-inspired, riso poster aesthetic, ink on paper, no text, no logo, no colors outside the authoritative palette, no photorealism, no busy background, no multi-panel grid, no collage of separate images.
 
 [COVER ART CONSTRAINTS]`;
 
@@ -47,6 +49,7 @@ const colbaltTheme = {
   },
   imagePrompt: {
     subjectPlaceholder: "[SUBJECT / SCENE]",
+    palettePlaceholder: "[COLOR PALETTE]",
     constraintPlaceholder: "[COVER ART CONSTRAINTS]",
     coverArt: {
       frame: "8.5in x 7.45in with the default cover band; runtime requests resolve the configured crop",
@@ -56,7 +59,7 @@ const colbaltTheme = {
     },
     guidance: [
       "Use this prompt template for the required manuscript-grounded cover artwork whenever the colbalt theme or one of its aliases is active.",
-      "The runtime replaces [SUBJECT / SCENE] and [COVER ART CONSTRAINTS] from the validated plan and configured crop.",
+      "The runtime replaces [SUBJECT / SCENE], [COLOR PALETTE], and [COVER ART CONSTRAINTS] from the validated plan, resolved theme colors, and configured crop.",
       "Keep HTML/CSS responsible for all cover typography; the bitmap must contain no title, author, or logo.",
       "Use the same template for any part-divider art, changing the subject and never reusing the cover bitmap."
     ],

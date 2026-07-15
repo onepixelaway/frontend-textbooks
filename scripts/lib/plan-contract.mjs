@@ -1,6 +1,7 @@
 import { DEFAULT_THEME_NAME, getTheme } from "../../themes/index.mjs";
+import { defaultRequireFeaturePages } from "./book-policy.mjs";
 
-const COVER_ROUTES = ["type", "symbol", "photo", "minimal", "press"];
+const COVER_ROUTES = ["photo", "minimal"];
 const BODY_COLUMNS = ["text-two", "text-single", "text-three"];
 
 export function hasPlanException(plan, rule) {
@@ -40,8 +41,43 @@ function assertDiagramContract(diagram, index) {
   }
 }
 
+function assertFeaturePageContract(feature, index) {
+  const label = `book-plan ${feature.kind} feature page ${index + 1}`;
+  const common = ["id", "kind", "anchorSourceBlockId", "sourceBlockIds", "eyebrow", "title", "deck", "rationale"];
+  const kindFields = {
+    framework: ["items", "footer"],
+    scorecard: ["sides", "verdictLabel", "verdict"],
+    numbers: ["panels", "highlight"]
+  };
+  const allowed = new Set([...common, ...(kindFields[feature.kind] ?? [])]);
+  const irrelevant = Object.keys(feature).filter((field) => !allowed.has(field));
+  if (irrelevant.length) throw new Error(`${label} contains fields for a different feature grammar: ${irrelevant.join(", ")}`);
+  if (!feature.sourceBlockIds.includes(feature.anchorSourceBlockId)) {
+    throw new Error(`${label} anchorSourceBlockId must also appear in sourceBlockIds`);
+  }
+  if (feature.kind === "framework") {
+    if (!Array.isArray(feature.items) || feature.items.length < 3 || feature.items.length > 6 || !feature.footer) {
+      throw new Error(`${label} must declare 3–6 items and a footer`);
+    }
+  } else if (feature.kind === "scorecard") {
+    if (!Array.isArray(feature.sides) || feature.sides.length !== 2 || !feature.verdictLabel || !feature.verdict) {
+      throw new Error(`${label} must declare exactly two sides, a verdict label, and a verdict`);
+    }
+    if (feature.sides.some((side) => !Array.isArray(side.metrics) || side.metrics.length < 2 || side.metrics.length > 4)) {
+      throw new Error(`${label} sides must each declare 2–4 metrics`);
+    }
+  } else if (feature.kind === "numbers") {
+    if (!Array.isArray(feature.panels) || feature.panels.length < 2 || feature.panels.length > 4 || !feature.highlight) {
+      throw new Error(`${label} must declare 2–4 panels and a highlight`);
+    }
+    if (feature.panels.some((panel) => !Array.isArray(panel.entries) || panel.entries.length !== 2)) {
+      throw new Error(`${label} panels must each declare exactly two entries`);
+    }
+  }
+}
+
 function assertSubjectiveAestheticCriteria(criteria) {
-  const measurableConfiguration = /\b(?:(?:one|single|two|three|[123])[- ]column|(?:type|symbol|photo|minimal|press)[ -]cover(?: route)?|(?:colbalt|cobalt|default|executive|alumni|field-guide|scholarly|technical|literary)[ -]theme)\b/iu;
+  const measurableConfiguration = /\b(?:(?:one|single|two|three|[123])[- ]column|(?:photo|minimal)[ -]cover(?: route)?|(?:colbalt|cobalt|default|executive|alumni|field-guide|scholarly|technical|literary)[ -]theme)\b/iu;
   const invalid = criteria.filter((criterion) => measurableConfiguration.test(criterion));
   if (invalid.length) {
     throw new Error(`book-plan aestheticReview.criteria must contain subjective review criteria, not measurable configuration already represented by structured plan fields: ${invalid.join(" | ")}`);
@@ -54,6 +90,16 @@ export function assertPlanMatchesManuscript(plan, parsed, registeredThemes) {
     throw new Error("book-plan manuscriptHash does not match the current manuscript");
   }
   const sourceIds = new Set(parsed.sourceManifest.blocks.map((block) => block.id));
+  const featureIds = plan.visuals.featurePages.map((feature) => feature.id);
+  if (new Set(featureIds).size !== featureIds.length) {
+    throw new Error("book-plan contains a duplicate feature page id");
+  }
+  const unknownFeatureAnchors = plan.visuals.featurePages
+    .map((feature) => feature.anchorSourceBlockId)
+    .filter((id) => !sourceIds.has(id));
+  if (unknownFeatureAnchors.length) {
+    throw new Error(`book-plan feature page references unknown anchor source block id(s): ${[...new Set(unknownFeatureAnchors)].join(", ")}`);
+  }
   const classificationIds = plan.classifications.map((entry) => entry.sourceBlockId);
   const seenClassifications = new Set();
   const duplicateClassifications = new Set();
@@ -67,12 +113,14 @@ export function assertPlanMatchesManuscript(plan, parsed, registeredThemes) {
   const referencedIds = [
     ...classificationIds,
     ...plan.visuals.cover.sourceBlockIds,
-    ...plan.visuals.diagrams.flatMap((entry) => entry.sourceBlockIds)
+    ...plan.visuals.diagrams.flatMap((entry) => entry.sourceBlockIds),
+    ...plan.visuals.featurePages.flatMap((entry) => entry.sourceBlockIds)
   ];
   const unknown = [...new Set(referencedIds.filter((id) => !sourceIds.has(id)))];
   if (unknown.length) throw new Error(`book-plan references unknown source block id(s): ${unknown.join(", ")}`);
   assertMeaningfulCoverDecision(plan.visuals.cover);
   plan.visuals.diagrams.forEach(assertDiagramContract);
+  plan.visuals.featurePages.forEach(assertFeaturePageContract);
   assertSubjectiveAestheticCriteria(plan.aestheticReview.criteria);
   const diagramGrounding = new Set(plan.visuals.diagrams.flatMap((entry) => entry.sourceBlockIds));
   const unmaterialized = plan.classifications
@@ -97,6 +145,9 @@ export function resolvedPlanFacts(config, plan) {
     coverRoute: plan.layout.coverRoute,
     configCoverRoute: config.selectedCoverRoute ?? "photo",
     imagePolicy: plan.visuals.policy,
+    featurePageCount: plan.visuals.featurePages.length,
+    featurePageKinds: plan.visuals.featurePages.map((feature) => feature.kind),
+    featurePagesRequired: hasPlanException(plan, "waive-feature-pages") ? false : (config.requireFeaturePages ?? defaultRequireFeaturePages(config)),
     coverRequired: true
   };
 }
@@ -117,6 +168,12 @@ export function assertPlanPolicy(plan, config, parsed) {
   }
   if (config.requireDiagrams === false && !hasPlanException(plan, "waive-diagrams")) {
     throw new Error("requireDiagrams=false requires a waive-diagrams exception in book-plan");
+  }
+  if (config.requireFeaturePages === false && !hasPlanException(plan, "waive-feature-pages")) {
+    throw new Error("requireFeaturePages=false requires a waive-feature-pages exception in book-plan");
+  }
+  if (facts.featurePagesRequired && !plan.visuals.featurePages.length) {
+    throw new Error("Designed nonfiction requires at least one structured visuals.featurePages decision; add a manuscript-grounded feature page or a waive-feature-pages exception");
   }
   if (config.requirePartImages === false && parsed.parts.length && !hasPlanException(plan, "waive-part-images")) {
     throw new Error("requirePartImages=false requires a waive-part-images exception in book-plan when parts exist");

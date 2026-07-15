@@ -143,3 +143,18 @@ test("genuine source and TOC failures stay actionable after readiness succeeds",
   assert.ok(diagnostics.items.every((item) => item.actionable && !item.derived));
   assert.deepEqual(new Set(createRepairTasks(diagnostics).tasks.map((task) => task.code)), new Set(["TOC_TARGET_MISSING", "SOURCE_COVERAGE_LOW"]));
 });
+
+test("a required missing feature page produces one actionable structure repair", () => {
+  const diagnostics = normalizeDiagnostics({
+    desktop: {
+      ready: true,
+      diagnostics: {},
+      sourcePreservation: { required: false },
+      requireFeaturePages: true,
+      featurePageCount: 0,
+      diagramCount: 1
+    }
+  });
+  assert.deepEqual(diagnostics.items.map((item) => item.code), ["FEATURE_PAGE_REQUIRED"]);
+  assert.deepEqual(createRepairTasks(diagnostics).tasks.map((task) => task.allowedActions), [["rewrite-visual", "approve-exception"]]);
+});

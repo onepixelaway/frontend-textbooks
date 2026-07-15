@@ -15,6 +15,7 @@
     "coverBandHeight": { "type": "number", "minimum": 2.8, "maximum": 4.4 },
     "requirePartImages": { "type": "boolean" },
     "requireDiagrams": { "type": "boolean" },
+    "requireFeaturePages": { "type": "boolean" },
     "chapterOpeners": { "type": "boolean" },
     "chapterClosers": { "type": "object", "additionalProperties": { "type": "string" } },
     "partImages": { "type": "object", "additionalProperties": { "type": "string" } },
@@ -38,7 +39,7 @@
         "callout": { "type": "string", "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$" }
       }
     },
-    "selectedCoverRoute": { "type": "string", "enum": ["type", "symbol", "photo", "minimal", "press"] },
+    "selectedCoverRoute": { "type": "string", "enum": ["photo", "minimal"] },
     "bookType": { "type": "string", "enum": ["textbook", "manual", "field-guide", "business", "editorial", "coffee-table", "workbook", "literary", "plain-reader"] },
     "coverKicker": { "type": "string" },
     "bodyColumns": { "type": "string", "enum": ["text-two", "text-single", "text-three"] },
