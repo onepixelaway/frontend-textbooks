@@ -30,7 +30,18 @@ const colbaltTheme = {
       weights: [600, 700, 800],
       stack: '"Poppins", "Avenir Next", Helvetica, Arial, sans-serif'
     },
-    googleFontsHref: "https://fonts.googleapis.com/css2?family=Halant:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap"
+    faces: [
+      { family: "Poppins", weight: 600, file: "Poppins-SemiBold.ttf" },
+      { family: "Poppins", weight: 700, file: "Poppins-Bold.ttf" },
+      { family: "Poppins", weight: 800, file: "Poppins-ExtraBold.ttf" },
+      { family: "Halant", weight: 400, file: "Halant-Regular.ttf" },
+      { family: "Halant", weight: 500, file: "Halant-Medium.ttf" },
+      { family: "Halant", weight: 600, file: "Halant-SemiBold.ttf" }
+    ],
+    licenses: [
+      { family: "Poppins", file: "Poppins-OFL.txt" },
+      { family: "Halant", file: "Halant-OFL.txt" }
+    ]
   },
   colors: {
     browser: "#d7d7d3",

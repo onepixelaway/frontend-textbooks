@@ -15,7 +15,7 @@ const schemaNames = Object.freeze({
 });
 const supportedSchemaKeywords = new Set([
   "$schema", "$id", "title", "description", "default", "type", "properties", "required", "additionalProperties", "enum",
-  "minLength", "maxLength", "pattern", "minimum", "maximum", "minItems", "maxItems", "uniqueItems", "items"
+  "minLength", "maxLength", "pattern", "minimum", "maximum", "minItems", "maxItems", "uniqueItems", "items", "allOf", "not"
 ]);
 
 export function contractNames() {
@@ -29,6 +29,8 @@ export function assertSupportedSchema(schema, path = "schema") {
   }
   for (const [name, child] of Object.entries(schema.properties ?? {})) assertSupportedSchema(child, `${path}.properties.${name}`);
   if (schema.items) assertSupportedSchema(schema.items, `${path}.items`);
+  for (const [index, child] of (schema.allOf ?? []).entries()) assertSupportedSchema(child, `${path}.allOf[${index}]`);
+  if (schema.not) assertSupportedSchema(schema.not, `${path}.not`);
   if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
     assertSupportedSchema(schema.additionalProperties, `${path}.additionalProperties`);
   }
@@ -90,6 +92,12 @@ function validateNode(value, schema, path, errors) {
         validateNode(child, schema.additionalProperties, `${path}.${key}`, errors);
       }
     }
+  }
+  for (const child of schema.allOf ?? []) validateNode(value, child, path, errors);
+  if (schema.not) {
+    const forbiddenErrors = [];
+    validateNode(value, schema.not, path, forbiddenErrors);
+    if (forbiddenErrors.length === 0) errors.push(`${path} ${schema.not.description ?? "matches a forbidden field combination"}`);
   }
 }
 

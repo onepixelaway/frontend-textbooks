@@ -12,6 +12,7 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 
 - **Print-Ready PDF Output** - Exports US Letter PDFs with page-safe CSS, printed backgrounds, and fixed-format designed pages.
 - **HTML First** - Produces a browser-readable HTML book before exporting the PDF, so the artifact stays inspectable and editable.
+- **Bundled Theme Typography** - Ships each font-bearing theme with its licensed Google Fonts files, copies the active faces and licenses into the book, and renders without font-network access.
 - **Enforced Manuscript Preservation** - Tracks stable source blocks and fails verification below 90% coverage instead of merely estimating preservation.
 - **Original Cover Artwork on Every Run** - Requires a unique manuscript-grounded local bitmap, binds it to the active theme prompt and manuscript hash, and fails closed instead of falling back to a typographic cover.
 - **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, two-column reading pages, manuscript-grounded framework, scorecard, and numbers exhibits, diagrams, and chapter closers.
@@ -99,7 +100,7 @@ The skill will:
 
 1. Locate or ingest the manuscript.
 2. Analyze its subject, tone, audience, and cultural context.
-3. Recommend a topic-aware color scheme alongside two alternatives, ask the user to choose, and pause until they answer.
+3. Recommend a topic-aware color and typography system alongside two alternatives, honor any requested palette or typeface, and pause until the user chooses.
 4. Infer a book structure that preserves the source text.
 5. Plan the cover subject, chapter rhythm, structured diagrams, generated images, and 2–4 skim-worthy full-page exhibits when the manuscript supports them.
 6. Generate and record a unique manuscript-grounded cover bitmap using the active theme's canonical prompt.
@@ -133,7 +134,7 @@ Pipeline stdout is always one compact JSON object, including failures. Full evid
 
 ## Included Styles
 
-Interactive runs recommend three manuscript-grounded color schemes and wait for the user's choice. The selected system is recorded in `book.json` with a registered base theme plus optional semantic color overrides. For direct or legacy configs without a style, the runtime fallback is `colbalt`, a cobalt editorial system defined in `themes/colbalt`:
+Interactive runs recommend three manuscript-grounded visual systems and wait for the user's color and typography choice. `book.json.style` plus `themeOverrides` control color and image-prompt behavior; `fontTheme` may independently select another registered bundled typography pack. A requested Google Fonts family that is not registered can be downloaded with its OFL license into the book workspace and declared through `fontOverrides`; the build still renders offline. For direct or legacy configs without a style, the runtime fallback is `colbalt`, a cobalt editorial system defined in `themes/colbalt`:
 
 - Poppins-compatible local fallbacks for headings and labels by default
 - Halant-compatible local serif fallbacks for body copy by default
@@ -143,6 +144,10 @@ Interactive runs recommend three manuscript-grounded color schemes and wait for 
 - Solid-band split cover support for generated or supplied artwork
 
 The scaffold also includes an `alumni` theme inspired by a warm single-ink editorial system: Bricolage Grotesque display type, Fraunces body copy, rust terracotta ink, and cream paper.
+
+For example, `{"style":"colbalt","fontTheme":"alumni"}` keeps the cobalt palette and cover-art language while using Alumni's Bricolage Grotesque/Fraunces typography. Custom `fontOverrides` use the same display/body/UI roles and must declare every local face and license.
+
+Agents can inspect the executable packs with `node scripts/font-catalog.mjs`. For an unregistered Google Fonts request, `node scripts/acquire-google-fonts.mjs --example` prints the pinned request format; the completed command downloads faces and licenses from the official `google/fonts` repository and returns a ready-to-use `fontOverrides` object.
 
 Additional presets in `STYLE_PRESETS.md` include scholarly, field-guide, technical, literary, editorial journal, and product-manual directions. To make a preset available to the scaffold, add it as a module under `themes/` and register it in `themes/index.mjs`.
 

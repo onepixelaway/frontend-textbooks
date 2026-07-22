@@ -85,6 +85,11 @@ for (const theme of localThemes) {
 }
 
 export const STYLE_NAMES = Object.keys(THEMES);
+function hasBundledFonts(theme) {
+  return Boolean(theme?.fonts?.faces?.length && theme?.fonts?.licenses?.length);
+}
+
+export const FONT_THEME_NAMES = Object.freeze(localThemes.filter(hasBundledFonts).map(({ id }) => id));
 export const THEME_COLOR_KEYS = Object.freeze([
   "browser", "page", "ink", "heading", "deck", "muted", "meta",
   "accent", "soft", "rule", "steel", "coverBand", "callout"
@@ -92,6 +97,14 @@ export const THEME_COLOR_KEYS = Object.freeze([
 
 export function getTheme(name = DEFAULT_THEME_NAME) {
   return THEMES[name] ?? DEFAULT_THEME;
+}
+
+export function getFontTheme(name) {
+  const theme = THEMES[name];
+  if (!hasBundledFonts(theme)) {
+    throw new Error(`fontTheme must name a registered bundled font theme: ${name}`);
+  }
+  return theme;
 }
 
 export function themeColors(theme, overrides = {}) {
@@ -107,13 +120,4 @@ export function themeFontStack(theme, name) {
   if (name === "body") return fonts.body?.stack ?? theme.body;
   if (name === "ui") return fonts.ui?.stack ?? fonts.header?.stack ?? theme.ui;
   return "";
-}
-
-export function renderThemeFontLinks(theme) {
-  const href = theme.fonts?.googleFontsHref;
-  if (!href) return "";
-  return `
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="${href}" rel="stylesheet">`;
 }

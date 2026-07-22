@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -21,14 +21,14 @@ const repository = new URL("..", import.meta.url).pathname;
 const temporaryDirectories = [];
 after(async () => Promise.all(temporaryDirectories.map((path) => rm(path, { recursive: true, force: true }))));
 
-async function fixture({ aestheticRequired = false } = {}) {
+async function fixture({ aestheticRequired = false, style = "technical" } = {}) {
   const root = await mkdtemp(join(tmpdir(), "frontend-textbooks-pipeline-"));
   temporaryDirectories.push(root);
   const outputDir = join(root, "output");
   const manuscript = "# Pipeline Book\n\n## Chapter\n\nA deterministic paragraph for the pipeline.";
   return writeBookProject(root, {
     manuscript,
-    configOverrides: { title: "Pipeline Book", author: "Test", outputDir, style: "technical" },
+    configOverrides: { title: "Pipeline Book", author: "Test", outputDir, style },
     planOverrides: { aestheticRequired }
   });
 }
@@ -79,6 +79,39 @@ test("one orchestration command emits deterministic fast-tier artifacts", async 
   const rebuilt = JSON.parse((await run(paths)).stdout);
   assert.equal(rebuilt.skipped, false);
   assert.match(await readFile(join(paths.outputDir, "index.html"), "utf8"), /<!doctype html>/i);
+});
+
+test("cache keys include custom font bytes and republish changed faces", async () => {
+  const paths = await fixture();
+  const sourceDirectory = join(paths.root, "book-fonts");
+  await mkdir(sourceDirectory);
+  const initialFace = join(repository, "themes", "alumni", "fonts", "BricolageGrotesque-Variable.ttf");
+  const replacementFace = join(repository, "themes", "colbalt", "fonts", "Poppins-SemiBold.ttf");
+  const sourceFace = join(sourceDirectory, "Book-Sans.ttf");
+  await copyFile(initialFace, sourceFace);
+  await copyFile(join(repository, "themes", "alumni", "fonts", "BricolageGrotesque-OFL.txt"), join(sourceDirectory, "OFL.txt"));
+
+  const config = JSON.parse(await readFile(paths.configPath));
+  config.fontOverrides = {
+    sourceDirectory: "book-fonts",
+    display: { family: "Book Sans", fallback: "sans-serif" },
+    body: { family: "Book Sans", fallback: "sans-serif" },
+    ui: { family: "Book Sans", fallback: "sans-serif" },
+    faces: [{ family: "Book Sans", weight: "100 900", file: "Book-Sans.ttf" }],
+    licenses: [{ family: "Book Sans", file: "OFL.txt" }]
+  };
+  await writeFile(paths.configPath, JSON.stringify(config));
+  await refreshCoverRequest(paths);
+
+  assert.equal(JSON.parse((await run(paths)).stdout).skipped, false);
+  const publishedFace = join(paths.outputDir, "assets", "fonts", "custom", "Book-Sans.ttf");
+  const initialHash = sha256(await readFile(publishedFace));
+  assert.equal(JSON.parse((await run(paths)).stdout).skipped, true);
+
+  await copyFile(replacementFace, sourceFace);
+  assert.equal(JSON.parse((await run(paths)).stdout).skipped, false);
+  assert.notEqual(sha256(await readFile(publishedFace)), initialHash);
+  assert.equal(sha256(await readFile(publishedFace)), sha256(await readFile(sourceFace)));
 });
 
 test("relative outputDir is config-relative across pipeline and direct-builder working directories", async () => {
@@ -345,12 +378,42 @@ test("validation rejects stale plans and unreasoned policy bypasses", async (t) 
     await assert.rejects(run(paths, "validate"), /manuscriptHash does not match/i);
   });
 
-  await t.test("remote fonts without exception", async () => {
-    const paths = await fixture();
+  await t.test("legacy remote font mode resolves to bundled theme fonts", async () => {
+    const paths = await fixture({ style: "colbalt" });
     const config = JSON.parse(await readFile(paths.configPath));
     config.fontMode = "remote";
     await writeFile(paths.configPath, JSON.stringify(config));
-    await assert.rejects(run(paths, "validate"), /allow-remote-fonts/i);
+    await run(paths);
+    const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+    const manifest = JSON.parse(await readFile(join(paths.outputDir, "artifact-manifest.json"), "utf8"));
+    assert.match(html, /assets\/fonts\/colbalt\/Poppins-SemiBold\.ttf/);
+    assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
+    assert.ok(manifest.outputs.some(({ path }) => path === "assets/fonts/colbalt/Poppins-SemiBold.ttf"));
+    assert.ok(manifest.outputs.some(({ path }) => path === "assets/fonts/colbalt/Poppins-OFL.txt"));
+  });
+
+  await t.test("unregistered font theme", async () => {
+    const paths = await fixture();
+    const config = JSON.parse(await readFile(paths.configPath));
+    config.fontTheme = "missing-font-theme";
+    await writeFile(paths.configPath, JSON.stringify(config));
+    await assert.rejects(run(paths, "validate"), /fontTheme.*registered/i);
+  });
+
+  await t.test("conflicting font theme and overrides", async () => {
+    const paths = await fixture();
+    const config = JSON.parse(await readFile(paths.configPath));
+    config.fontTheme = "alumni";
+    config.fontOverrides = {
+      sourceDirectory: "book-fonts",
+      display: { family: "Example Sans", fallback: "sans-serif" },
+      body: { family: "Example Serif", fallback: "serif" },
+      ui: { family: "Example Sans", fallback: "sans-serif" },
+      faces: [{ family: "Example Sans", weight: 400, file: "Example.ttf" }],
+      licenses: [{ family: "Example Sans", file: "OFL.txt" }]
+    };
+    await writeFile(paths.configPath, JSON.stringify(config));
+    await assert.rejects(run(paths, "validate"), /fontTheme.*fontOverrides.*not both/i);
   });
 
   await t.test("duplicate semantic classification", async () => {
@@ -363,7 +426,7 @@ test("validation rejects stale plans and unreasoned policy bypasses", async (t) 
 });
 
 test("full tier pauses for model-owned aesthetic judgment, then finalizes without rerendering", async () => {
-  const paths = await fixture({ aestheticRequired: true });
+  const paths = await fixture({ aestheticRequired: true, style: "colbalt" });
   let first;
   try {
     await run(paths, "finalize", ["--tier", "full"]);
@@ -395,7 +458,7 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
   const request = JSON.parse(await readFile(join(paths.outputDir, ".verification", "aesthetic-review-request.json")));
   assert.equal(request.version, 2);
   assert.deepEqual(request.resolved, {
-    theme: "technical",
+    theme: "colbalt",
     bodyColumns: "text-single",
     chapterOpeners: false,
     coverRoute: "photo",
@@ -443,11 +506,26 @@ test("full tier pauses for model-owned aesthetic judgment, then finalizes withou
   const summary = JSON.parse(second.stdout);
   assert.equal(summary.status, "pass");
   assert.equal(summary.skipped, true);
+  const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+  const pdf = await stat(join(paths.outputDir, "index.pdf"));
+  const browserReport = JSON.parse(await readFile(join(paths.outputDir, ".verification", "render-report.json"), "utf8"));
+  assert.ok(pdf.size > 0);
+  assert.match(html, /@font-face/u);
+  assert.match(html, /assets\/fonts\/colbalt\/Poppins-SemiBold\.ttf/u);
+  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/u);
+  for (const viewport of ["desktop", "print", "mobile"]) {
+    assert.deepEqual(browserReport[viewport].diagnostics.blockedRequests, []);
+    assert.deepEqual(browserReport[viewport].diagnostics.requestFailures, []);
+    assert.deepEqual(browserReport[viewport].diagnostics.assetFailures, []);
+  }
   const manifest = JSON.parse(await readFile(join(paths.outputDir, "artifact-manifest.json")));
   assert.equal(manifest.reasoning.aestheticReview, "pass");
   assert.ok(manifest.outputs.some((item) => item.path.endsWith(".pdf")));
   assert.ok(manifest.outputs.some((item) => item.path === ".verification/contact-sheet.png"));
   const manifested = new Set(manifest.outputs.map((item) => item.path));
+  assert.ok(manifested.has("index.pdf"));
+  assert.ok(manifested.has("assets/fonts/colbalt/Poppins-SemiBold.ttf"));
+  assert.ok(manifested.has("assets/fonts/colbalt/Poppins-OFL.txt"));
   assert.ok(manifested.has(".verification/pdf-pages/pdf-structure.json"));
   assert.ok(manifested.has(".verification/pdf-pages/pdf-inspection.json"));
   for (let page = 1; page <= structure.pageCount; page += 1) {

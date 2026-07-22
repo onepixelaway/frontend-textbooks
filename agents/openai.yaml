@@ -1,4 +1,4 @@
 interface:
   display_name: "Frontend Textbooks"
   short_description: "Make art-led books with rich skim pages"
-  default_prompt: "Use $frontend-textbooks to analyze my manuscript, recommend and ask me to choose a topic-aware color scheme, then make a designed Letter-size HTML book and PDF with unique manuscript-grounded cover artwork and rich skim pages."
+  default_prompt: "Use $frontend-textbooks to analyze my manuscript, recommend and ask me to choose a topic-aware color and typography system, then make a designed Letter-size HTML book and PDF with unique manuscript-grounded cover artwork and rich skim pages."

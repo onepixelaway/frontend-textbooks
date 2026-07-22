@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 import { assertContract } from "./lib/json-contracts.mjs";
 import { sha256 } from "./lib/content-hash.mjs";
 import { parseManuscript } from "./lib/manuscript.mjs";
-import { STYLE_NAMES } from "../themes/index.mjs";
+import { getTheme, STYLE_NAMES } from "../themes/index.mjs";
+import { createThemeCacheIdentity, normalizeThemeFontMode, resolveBookFontTheme } from "../themes/font-assets.mjs";
 import { assertPlanMatchesManuscript, assertPlanPolicy, resolvedPlanFacts } from "./lib/plan-contract.mjs";
 import { createSourceInventory } from "./lib/source-inventory.mjs";
-import { getTheme } from "../themes/index.mjs";
 import { resolveLocalAsset } from "./lib/local-assets.mjs";
 import { contactSheetEvidence } from "./lib/aesthetic-review.mjs";
 import { PIPELINE_MODES, TIER_RANK } from "./lib/verification-profiles.mjs";
@@ -154,11 +154,23 @@ function validateInputs(args) {
     ...readdirSync(join(scriptDir, "lib")).filter((name) => name.endsWith(".mjs")).map((name) => join(scriptDir, "lib", name)),
     join(scriptDir, "../page-base.css"),
     join(scriptDir, "../package.json"),
-    join(scriptDir, "../package-lock.json")
+    join(scriptDir, "../package-lock.json"),
+    join(scriptDir, "../themes/index.mjs"),
+    join(scriptDir, "../themes/font-assets.mjs")
   ].sort();
   const toolHashes = toolPaths.map((path) => [relativePath(resolve(scriptDir, ".."), path), hashFile(path)]);
   const toolchain = { node: process.version };
-  const themeHash = sha256(getTheme(plan?.theme.id ?? config.style));
+  const theme = getTheme(plan?.theme.id ?? config.style);
+  const fontMode = normalizeThemeFontMode(config.fontMode);
+  const fontTheme = resolveBookFontTheme({
+    theme,
+    fontTheme: config.fontTheme,
+    fontOverrides: config.fontOverrides,
+    projectRoot: paths.projectRoot,
+    outputDir,
+    fontMode
+  });
+  const themeHash = sha256(createThemeCacheIdentity({ theme, fontTheme, fontMode }));
   const targets = {
     html: relativePath(outputDir, outputHtml),
     pdf: relativePath(outputDir, pdfPath),

@@ -1,6 +1,23 @@
 # Book Style Presets
 
-Use these as starting points for the three manuscript-grounded color-scheme choices presented after analysis. The interactive workflow never applies one silently: recommend a scheme, show two credible alternatives, and wait for the user's choice. The goal is not a theme pasted on top of text; it is a coherent book system.
+Use these as starting points for the three manuscript-grounded color-and-typography choices presented after analysis. The interactive workflow never applies one silently: recommend a visual system, show two credible alternatives, and wait for the user's choice. Every option must name an executable font route: either a registered bundled `fontTheme` or a project-local, licensed `fontOverrides` bundle. The user may mix either typography route with another listed palette.
+
+Discover the registered packs, aliases, and display/body/UI roles before presenting choices:
+
+```bash
+node "$SKILL_DIR/scripts/font-catalog.mjs"
+```
+
+For an unregistered Google Fonts family, download the official faces and family license into the book workspace and use the returned `fontOverrides`. The acquisition request must pin an immutable commit from the official `google/fonts` repository and may contain at most the three role families:
+
+```bash
+node "$SKILL_DIR/scripts/acquire-google-fonts.mjs" --example
+node "$SKILL_DIR/scripts/acquire-google-fonts.mjs" \
+  --project-root "<directory containing book.json>" \
+  --request "<google-fonts-request.json>"
+```
+
+Copy the command's `fontOverrides` object into `book.json`; do not also set `fontTheme`. Do not reference a remote stylesheet or list a typeface unless its registered pack or completed acquisition route will actually produce it.
 
 Avoid generic AI aesthetics: purple gradients, identical cards, centered everything, system-font blandness, and decoration that fights the prose.
 
@@ -16,13 +33,29 @@ The scaffold source of truth for this default is [themes/colbalt/index.mjs](them
 - Body: `Halant` 400
 - UI/captions: `Poppins` 600-700
 
-**Google Fonts**
+**Executable font route:** `{"fontTheme":"colbalt"}`. When `style` is already `colbalt`, omitting `fontTheme` selects the same pack.
 
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Halant:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+**Bundled fonts**
+
+```css
+@font-face {
+  font-family: "Poppins";
+  src: url("assets/fonts/colbalt/Poppins-Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Halant";
+  src: url("assets/fonts/colbalt/Halant-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
 ```
+
+The theme declares all six local faces and both OFL license files; the build copies them automatically. The two rules above only illustrate the generated CSS.
 
 **Palette**
 
@@ -75,6 +108,8 @@ Use `themes/colbalt/index.mjs` as the sole source for `imagePrompt.template`, cr
 
 The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mjs). It adapts a warm single-ink editorial system from the Long Table design reference: Bricolage Grotesque display type, Fraunces body and metadata, rust terracotta ink, and cream paper. Its generated-image prompt uses sunlit Mediterranean editorial photography with a restrained focal composition; runtime palette compilation supplies the selected colors.
 
+**Executable font route:** `{"fontTheme":"alumni"}`. When `style` is already `alumni`, omitting `fontTheme` selects the same pack.
+
 ## 1. Scholarly Marginalia
 
 **Best for:** textbooks, histories, philosophy, research explainers, annotated essays.
@@ -84,6 +119,8 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 - Display: `Cormorant Garamond` or `Fraunces`
 - Body: `Source Serif 4`
 - UI/captions: `IBM Plex Sans`
+
+**Executable font route:** custom `fontOverrides`. Acquire the chosen display family plus Source Serif 4 and IBM Plex Sans with the pinned `google/fonts` helper, then use its returned roles, faces, and license records. Do not set `fontTheme` for this pairing.
 
 **Palette**
 
@@ -118,6 +155,8 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 - Body: `Literata`
 - UI/captions: `DM Sans`
 
+**Executable font route:** custom `fontOverrides`. Acquire Bricolage Grotesque, Literata, and DM Sans with the pinned `google/fonts` helper and use the returned metadata. Do not use `fontTheme: "alumni"`; that pack does not contain Literata or DM Sans.
+
 **Palette**
 
 ```css
@@ -151,6 +190,8 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 - Body: `Libre Baskerville`
 - UI/captions: `Manrope`
 
+**Executable font route:** custom `fontOverrides`. Acquire all three families with the pinned `google/fonts` helper and use the returned metadata; do not set `fontTheme`.
+
 **Palette**
 
 ```css
@@ -182,7 +223,10 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 
 - Display: `Archivo`
 - Body: `Source Sans 3`
-- Mono: `JetBrains Mono`
+- UI/captions: `Source Sans 3`
+- Code: the scaffold's existing system monospace stack
+
+**Executable font route:** custom `fontOverrides`. Acquire Archivo and Source Sans 3 with the pinned `google/fonts` helper, assign Source Sans 3 to both body and UI, and use the returned metadata. The font theme contract has no separate mono role, so this preset does not promise an unbundled code face.
 
 **Palette**
 
@@ -217,6 +261,8 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 - Body: `Work Sans`
 - UI/captions: `Work Sans`
 
+**Executable font route:** custom `fontOverrides`. Acquire Fraunces and Work Sans together with the pinned `google/fonts` helper and use the returned metadata. Do not use `fontTheme: "alumni"`; Alumni's body/UI pairing is Fraunces rather than Work Sans.
+
 **Palette**
 
 ```css
@@ -250,6 +296,8 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 - Body: `Source Serif 4`
 - UI/captions: `Public Sans`
 
+**Executable font route:** custom `fontOverrides`. Acquire all three families with the pinned `google/fonts` helper and use the returned metadata; do not set `fontTheme`.
+
 **Palette**
 
 ```css
@@ -279,9 +327,11 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 
 **Typography**
 
-- Display: `Poppins` 700 by default; use `Newsreader`, `Tiempos Headline`, or `Libre Baskerville` only when the user asks for that aesthetic
-- Body: `Halant` by default; use `Source Serif 4` or `Lyon Text` only when the user asks for that aesthetic
-- UI/captions: `Poppins`, `Avenir Next`, `Inter`, or `IBM Plex Sans`
+- Display: `Poppins` 700 by default; use `Newsreader` or `Libre Baskerville` only when the user asks for that aesthetic
+- Body: `Halant` by default; use `Source Serif 4` only when the user asks for that aesthetic
+- UI/captions: `Poppins` by default; use `Inter` or `IBM Plex Sans` only when the user asks for that aesthetic
+
+**Executable font route:** the default pairing is `{"fontTheme":"colbalt"}`. Any requested alternative is a custom `fontOverrides` route: acquire every selected display/body/UI family and its license with the pinned helper before offering it.
 
 **Palette**
 
@@ -337,7 +387,10 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 
 - Display: `Syne`
 - Body: `IBM Plex Sans`
-- Mono: `Space Mono`
+- UI/captions: `IBM Plex Sans`
+- Code: the scaffold's existing system monospace stack
+
+**Executable font route:** custom `fontOverrides`. Acquire Syne and IBM Plex Sans with the pinned `google/fonts` helper, assign IBM Plex Sans to body and UI, and use the returned metadata. The font theme contract has no separate mono role, so this preset does not promise an unbundled code face.
 
 **Palette**
 
@@ -371,6 +424,8 @@ The scaffold source of truth is [themes/alumni/index.mjs](themes/alumni/index.mj
 - Display: `Cormorant Garamond`
 - Body: `Crimson Text`
 - UI/captions: `Alegreya Sans`
+
+**Executable font route:** custom `fontOverrides`. Acquire all three families with the pinned `google/fonts` helper and use the returned metadata; do not set `fontTheme`.
 
 **Palette**
 

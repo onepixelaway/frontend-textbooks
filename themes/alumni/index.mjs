@@ -27,7 +27,14 @@ const alumniTheme = {
       weights: [400, 500, 600],
       stack: '"Fraunces", Georgia, serif'
     },
-    googleFontsHref: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap"
+    faces: [
+      { family: "Bricolage Grotesque", weight: "200 800", file: "BricolageGrotesque-Variable.ttf" },
+      { family: "Fraunces", weight: "100 900", file: "Fraunces-Variable.ttf" }
+    ],
+    licenses: [
+      { family: "Bricolage Grotesque", file: "BricolageGrotesque-OFL.txt" },
+      { family: "Fraunces", file: "Fraunces-OFL.txt" }
+    ]
   },
   colors: {
     browser: "#E8D7B6",

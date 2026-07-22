@@ -5,6 +5,35 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["title", "author", "coverImage"],
+  "allOf": [
+    {
+      "not": {
+        "description": "fontTheme and fontOverrides may not both be set",
+        "type": "object",
+        "required": ["fontTheme", "fontOverrides"]
+      }
+    },
+    {
+      "not": {
+        "description": "fontTheme requires bundled fontMode",
+        "type": "object",
+        "required": ["fontMode", "fontTheme"],
+        "properties": {
+          "fontMode": { "enum": ["system"] }
+        }
+      }
+    },
+    {
+      "not": {
+        "description": "fontOverrides requires bundled fontMode",
+        "type": "object",
+        "required": ["fontMode", "fontOverrides"],
+        "properties": {
+          "fontMode": { "enum": ["system"] }
+        }
+      }
+    }
+  ],
   "properties": {
     "title": { "type": "string", "minLength": 1 },
     "author": { "type": "string", "minLength": 1 },
@@ -43,6 +72,70 @@
     "bookType": { "type": "string", "enum": ["textbook", "manual", "field-guide", "business", "editorial", "coffee-table", "workbook", "literary", "plain-reader"] },
     "coverKicker": { "type": "string" },
     "bodyColumns": { "type": "string", "enum": ["text-two", "text-single", "text-three"] },
-    "fontMode": { "type": "string", "enum": ["system", "remote"] }
+    "fontTheme": { "type": "string", "minLength": 1 },
+    "fontOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceDirectory", "display", "body", "ui", "faces", "licenses"],
+      "properties": {
+        "sourceDirectory": { "type": "string", "minLength": 1, "pattern": "^(?![/\\\\])(?![A-Za-z]:[/\\\\]).+" },
+        "display": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["family", "fallback"],
+          "properties": {
+            "family": { "type": "string", "minLength": 1, "pattern": "^[^<>;{}\\u0000-\\u001F\\u007F]+$" },
+            "fallback": { "type": "string", "enum": ["serif", "sans-serif", "monospace"] }
+          }
+        },
+        "body": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["family", "fallback"],
+          "properties": {
+            "family": { "type": "string", "minLength": 1, "pattern": "^[^<>;{}\\u0000-\\u001F\\u007F]+$" },
+            "fallback": { "type": "string", "enum": ["serif", "sans-serif", "monospace"] }
+          }
+        },
+        "ui": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["family", "fallback"],
+          "properties": {
+            "family": { "type": "string", "minLength": 1, "pattern": "^[^<>;{}\\u0000-\\u001F\\u007F]+$" },
+            "fallback": { "type": "string", "enum": ["serif", "sans-serif", "monospace"] }
+          }
+        },
+        "faces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["family", "weight", "file"],
+            "properties": {
+              "family": { "type": "string", "minLength": 1, "pattern": "^[^<>;{}\\u0000-\\u001F\\u007F]+$" },
+              "weight": { "type": ["number", "string"], "minimum": 1, "maximum": 1000, "pattern": "^(?:normal|bold|(?:[1-9][0-9]{0,2}|1000)(?: (?:[1-9][0-9]{0,2}|1000))?)$" },
+              "style": { "type": "string", "enum": ["normal", "italic", "oblique"] },
+              "file": { "type": "string", "pattern": "^[^/\\\\]+\\.(?:woff2?|ttf|otf)$" }
+            }
+          }
+        },
+        "licenses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["family", "file"],
+            "properties": {
+              "family": { "type": "string", "minLength": 1, "pattern": "^[^<>;{}\\u0000-\\u001F\\u007F]+$" },
+              "file": { "type": "string", "pattern": "^[^/\\\\]+\\.txt$" }
+            }
+          }
+        }
+      }
+    },
+    "fontMode": { "type": "string", "enum": ["bundled", "system", "remote"] }
   }
 }

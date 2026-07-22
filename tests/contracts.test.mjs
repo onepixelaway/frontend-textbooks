@@ -24,21 +24,90 @@ test("contract schemas reject keywords the lightweight validator cannot enforce"
   );
 });
 
+test("book font selection contract rejects conflicting modes and sources", () => {
+  const base = { title: "Book", author: "Author", coverImage: "assets/cover.png" };
+  const overrides = {
+    sourceDirectory: "book-fonts",
+    display: { family: "Example Sans", fallback: "sans-serif" },
+    body: { family: "Example Serif", fallback: "serif" },
+    ui: { family: "Example Sans", fallback: "sans-serif" },
+    faces: [{ family: "Example Sans", weight: 400, file: "Example.ttf" }],
+    licenses: [{ family: "Example Sans", file: "OFL.txt" }]
+  };
+
+  for (const [config, expected] of [
+    [{ ...base, fontTheme: "alumni", fontOverrides: overrides }, /fontTheme and fontOverrides may not both be set/u],
+    [{ ...base, fontMode: "system", fontTheme: "alumni" }, /fontTheme requires bundled fontMode/u],
+    [{ ...base, fontMode: "system", fontOverrides: overrides }, /fontOverrides requires bundled fontMode/u]
+  ]) {
+    const result = validateContract("book-config", config);
+    assert.equal(result.valid, false);
+    assert.match(result.errors.join("\n"), expected);
+  }
+});
+
+test("book font descriptors reject markup, invalid ranges, and unsafe files", () => {
+  const base = {
+    title: "Book",
+    author: "Author",
+    coverImage: "assets/cover.png",
+    fontOverrides: {
+      sourceDirectory: "book-fonts",
+      display: { family: "Example Sans", fallback: "sans-serif" },
+      body: { family: "Example Sans", fallback: "sans-serif" },
+      ui: { family: "Example Sans", fallback: "sans-serif" },
+      faces: [{ family: "Example Sans", weight: 400, file: "Example.ttf" }],
+      licenses: [{ family: "Example Sans", file: "OFL.txt" }]
+    }
+  };
+  const invalid = Array.from({ length: 5 }, () => structuredClone(base));
+  invalid[0].fontOverrides.display.family = "Example</style><script>bad()</script>";
+  invalid[1].fontOverrides.faces[0].weight = 1001;
+  invalid[2].fontOverrides.faces[0].weight = "heavy";
+  invalid[3].fontOverrides.faces[0].style = "upright";
+  invalid[4].fontOverrides.licenses[0].file = "../OFL.txt";
+
+  for (const config of invalid) assert.equal(validateContract("book-config", config).valid, false);
+});
+
 test("book config validates required fields, enums, ranges, and filenames", () => {
   assert.equal(validateContract("book-config", { title: "Book", author: "Author", coverImage: "assets/cover.png", fontMode: "system" }).valid, true);
+  assert.equal(validateContract("book-config", { title: "Book", author: "Author", coverImage: "assets/cover.png", fontMode: "bundled" }).valid, true);
+  assert.equal(validateContract("book-config", { title: "Book", author: "Author", coverImage: "assets/cover.png", fontTheme: "alumni" }).valid, true);
+  assert.equal(validateContract("book-config", {
+    title: "Book",
+    author: "Author",
+    coverImage: "assets/cover.png",
+    fontOverrides: {
+      sourceDirectory: "book-fonts",
+      display: { family: "Bricolage Grotesque", fallback: "sans-serif" },
+      body: { family: "Fraunces", fallback: "serif" },
+      ui: { family: "Bricolage Grotesque", fallback: "sans-serif" },
+      faces: [
+        { family: "Bricolage Grotesque", weight: "200 800", file: "Bricolage.ttf" },
+        { family: "Fraunces", weight: "100 900", file: "Fraunces.ttf" }
+      ],
+      licenses: [
+        { family: "Bricolage Grotesque", file: "Bricolage-OFL.txt" },
+        { family: "Fraunces", file: "Fraunces-OFL.txt" }
+      ]
+    }
+  }).valid, true);
   const invalid = validateContract("book-config", {
     title: "",
     author: "Author",
     coverImage: "assets/cover.png",
     outputHtml: "nested/index.html",
     coverBandHeight: 8,
-    fontMode: "sometimes"
+    fontMode: "sometimes",
+    fontTheme: ""
   });
   assert.equal(invalid.valid, false);
   assert.match(invalid.errors.join("\n"), /must not be empty/);
   assert.match(invalid.errors.join("\n"), /outputHtml/);
   assert.match(invalid.errors.join("\n"), /at most 4.4/);
-  assert.match(invalid.errors.join("\n"), /system, remote/);
+  assert.match(invalid.errors.join("\n"), /bundled, system, remote/);
+  assert.match(invalid.errors.join("\n"), /fontTheme.*must not be empty/);
 });
 
 test("model-authored contracts accept structured reasoning and reject prose-shaped extras", () => {

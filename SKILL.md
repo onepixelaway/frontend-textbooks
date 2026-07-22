@@ -21,7 +21,7 @@ Run bundled commands through `node "$SKILL_DIR/scripts/book-pipeline.mjs"`.
 
 Scripts own deterministic work: parsing, stable source IDs, schemas, path safety, hashes, pagination measurements, diagnostics, screenshots, PDF export/inspection, caching, and manifests.
 
-The model owns judgment: audience and genre, user-facing color-scheme recommendations, semantic classifications, theme/layout rationale, diagram, feature-page, and image choices, exception rationales, targeted repair decisions, and aesthetic approval. Express production decisions through the JSON contracts; do not encode them in prose for a script to interpret.
+The model owns judgment: audience and genre, user-facing color and typography recommendations, semantic classifications, theme/layout rationale, diagram, feature-page, and image choices, exception rationales, targeted repair decisions, and aesthetic approval. Express production decisions through the JSON contracts; do not encode them in prose for a script to interpret.
 
 ## Non-Negotiables
 
@@ -31,13 +31,13 @@ The model owns judgment: audience and genre, user-facing color-scheme recommenda
 - Make the result feel like a book, not a printed article or slide deck. Include appropriate front matter, page hierarchy, captions, running furniture, diagrams, and visual rhythm.
 - Keep production language out of reader-facing pages. Do not mention HTML, PDF export, Codex, AI, the skill, or a supplied manuscript inside the book unless requested.
 - Use distinct cover and part-divider assets. Never reuse cover art as an interior plate. Do not fabricate visual evidence.
-- Keep remote fonts off by default. Set `fontMode: "remote"` only with a recorded `allow-remote-fonts` plan exception.
+- Use bundled font files by default so HTML and PDF rendering stay deterministic and offline. `fontTheme` may select another registered typography pack independently of the color theme; `fontOverrides` declares a config-relative custom bundle with its license. Set `fontMode: "system"` only for intentional system-font fallbacks; legacy `remote` configs normalize to bundled fonts.
 
 ## Default Workflow
 
 ### 1. Prepare inputs
 
-Create `book.json` and retain the source manuscript as Markdown. Author, title, and a config-relative `coverImage` target inside `outputDir` are required. Relative paths always resolve from the directory containing `book.json`. Leave `style` and `themeOverrides` unresolved until the color-scheme decision in step 2.
+Create `book.json` and retain the source manuscript as Markdown. Author, title, and a config-relative `coverImage` target inside `outputDir` are required. Relative paths always resolve from the directory containing `book.json`. Leave `style`, `themeOverrides`, `fontTheme`, and `fontOverrides` unresolved until the visual-system decision in step 2.
 
 Treat H1 as book metadata, H2 as chapters, and H3/H4 as interior sections. Use `### Chapter title {chapter}` only when an H3 must explicitly start a chapter; empty chapters are invalid. Use `themeOverrides` for validated palette adaptations. Set `selectedCoverRoute` to `photo` or `minimal`; the same route drives the option and final cover.
 
@@ -48,11 +48,13 @@ node "$SKILL_DIR/scripts/book-pipeline.mjs" inventory \
   --config book.json --manuscript manuscript.md
 ```
 
-### 2. Choose the color scheme with the user
+### 2. Choose color and typography with the user
 
-After reading the manuscript and `planning-inventory.json`, present three numbered color-scheme choices grounded in its subject, tone, audience, and cultural context. Mark one as Recommended and explain the content connection in one sentence. Give each option a short name and representative role-based hex swatches; include any palette the user already requested as a choice. Ask which scheme they want, allow a different direction, and wait for the user's answer. Do not plan, generate artwork, or build while this decision is unresolved.
+After reading the manuscript and `planning-inventory.json`, present three numbered visual-system choices grounded in its subject, tone, audience, and cultural context. Mark one as Recommended. Give each a short name, representative role-based hex swatches, and a display/body typography pairing from a registered bundled font theme. Include any requested font or typeface and palette; let the user mix a listed palette and typography or request another direction. Wait for the user's answer before planning, generating artwork, or building.
 
-Record the answer in `book.json`: a registered base theme in `style` and validated semantic colors in `themeOverrides`. Those resolved colors govern both page CSS and the compiled palette section of generated-image prompts. Keep the recommendation rationale in `book-plan.json` under `theme.rationale`; do not create a second palette source of truth. Read [references/intake-and-planning.md](references/intake-and-planning.md) for the compact question format and palette rules.
+Before naming bundled type, inspect the executable catalog with `node "$SKILL_DIR/scripts/font-catalog.mjs"`. If the user selects an unregistered Google Fonts family, run `node "$SKILL_DIR/scripts/acquire-google-fonts.mjs" --example`, create a request pinned to an immutable commit in the official `google/fonts` repository, and run it with `--project-root` and `--request`. Use the returned `fontOverrides`; never invent face filenames, weights, or license records.
+
+Record the answer in `book.json`: `style` and `themeOverrides` own color and image-prompt behavior; `fontTheme` independently selects a registered bundled typography pack. For an unregistered Google Fonts request, download official font files and license into the book workspace and declare the local bundle in `fontOverrides` instead of `fontTheme`. Resolved colors govern page CSS and artwork prompts; fonts govern HTML/PDF typography only. Keep the combined rationale in `book-plan.json.theme.rationale`. Read [references/intake-and-planning.md](references/intake-and-planning.md).
 
 ### 3. Make the model plan
 

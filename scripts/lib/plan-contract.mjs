@@ -178,9 +178,6 @@ export function assertPlanPolicy(plan, config, parsed) {
   if (config.requirePartImages === false && parsed.parts.length && !hasPlanException(plan, "waive-part-images")) {
     throw new Error("requirePartImages=false requires a waive-part-images exception in book-plan when parts exist");
   }
-  if (config.fontMode === "remote" && !hasPlanException(plan, "allow-remote-fonts")) {
-    throw new Error("fontMode=remote requires an allow-remote-fonts exception in book-plan");
-  }
   const cover = normalizedAsset(config.coverImage);
   const reused = [
     ...Object.entries(config.partImages ?? {}).map(([scope, asset]) => ({ scope: `partImages.${scope}`, asset })),

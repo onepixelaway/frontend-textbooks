@@ -1,8 +1,23 @@
 #!/usr/bin/env node
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_THEME_NAME, STYLE_NAMES, getTheme, renderThemeFontLinks, themeColors, themeFontStack } from "../themes/index.mjs";
+import {
+  DEFAULT_THEME_NAME,
+  FONT_THEME_NAMES,
+  STYLE_NAMES,
+  getTheme,
+  themeColors,
+  themeFontStack
+} from "../themes/index.mjs";
+import {
+  FONT_OUTPUT_ROOT,
+  assertNotFontOutputPath,
+  normalizeThemeFontMode,
+  prepareThemeFonts,
+  resolveBookFontTheme,
+  stageThemeFonts
+} from "../themes/font-assets.mjs";
 import { parseManuscript, wordCount } from "./lib/manuscript.mjs";
 import { assertContract, readContractFile } from "./lib/json-contracts.mjs";
 import { assertPlanMatchesManuscript, assertPlanPolicy, hasPlanException } from "./lib/plan-contract.mjs";
@@ -16,6 +31,8 @@ import { assertCoverGenerationReceiptFile, assertCoverImageRequestFile } from ".
 import { assertCoverAssetNotReused, inspectCoverBitmap, resolveRequiredCoverAsset } from "./lib/cover-assets.mjs";
 import { sha256 } from "./lib/content-hash.mjs";
 import { defaultRequireDiagrams, defaultRequireFeaturePages } from "./lib/book-policy.mjs";
+import { isWithinPath, portableRelativePath } from "./lib/book-paths.mjs";
+import { publishGeneratedTargets } from "./lib/generated-publication.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(scriptDir, "..");
@@ -55,8 +72,11 @@ book.json fields:
   partImages   optional object keyed by part id, title, label, or number for generated part-divider art; if provided, must cover every part and use unique values
   style         optional: ${STYLE_NAMES.join(" | ")}
   themeOverrides optional object of known theme color keys using hex colors
+  fontTheme    optional bundled typography theme: ${FONT_THEME_NAMES.join(" | ")}
+  fontOverrides optional config-relative local font bundle for display, body, and UI roles
   selectedCoverRoute optional: ${COVER_ROUTE_IDS.join(" | ")}, default: photo
   bodyColumns   optional: ${BODY_COLUMN_CLASSES.join(" | ")}, default: text-two
+  fontMode     optional: bundled | system, default: bundled
 `);
   process.exit(1);
 }
@@ -105,35 +125,33 @@ for (const [inputPath, label] of [[configPath, "configuration"], [manuscriptPath
   if (generatedPaths.has(inputPath)) {
     throw new Error(`${generatedPaths.get(inputPath)} collides with the ${label} input: ${inputPath}`);
   }
+  assertNotFontOutputPath(outputDir, inputPath, `${label} input`);
 }
 
 mkdirSync(outputDir, { recursive: true });
 const releaseBuildLock = acquirePipelineLock(outputDir);
 process.once("exit", releaseBuildLock);
 
-function isOutsideDirectory(root, candidate) {
-  const path = relative(root, candidate);
-  return path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
-}
-
 function canonicalRelativeFile(root, candidate, label) {
-  if (isOutsideDirectory(root, candidate)) {
+  if (!isWithinPath(root, candidate)) {
     throw new Error(`${label} resolves outside outputDir: ${candidate}`);
   }
   if (existsSync(candidate)) {
     const canonicalRoot = realpathSync(root);
     const canonicalCandidate = realpathSync(candidate);
-    if (isOutsideDirectory(canonicalRoot, canonicalCandidate)) {
+    if (!isWithinPath(canonicalRoot, canonicalCandidate)) {
       throw new Error(`${label} resolves outside outputDir through a symbolic link: ${candidate}`);
     }
   }
-  return relative(root, candidate).split(sep).join("/");
+  return portableRelativePath(root, candidate);
 }
 
 function localAssetManifestPath(value, label) {
   const candidate = resolveLocalAsset(value, dirname(outputPath), label, outputDir);
   if (!candidate) return null;
-  if (!existsSync(candidate)) throw new Error(`${label} does not exist: ${candidate}`);
+  const candidateExists = existsSync(candidate);
+  assertNotFontOutputPath(outputDir, candidate, label);
+  if (!candidateExists) throw new Error(`${label} does not exist: ${candidate}`);
   if (!lstatSync(candidate).isFile()) throw new Error(`${label} must name a regular file: ${candidate}`);
   if (generatedPaths.has(candidate)) {
     throw new Error(`${label} collides with generated ${generatedPaths.get(candidate)}: ${candidate}`);
@@ -280,12 +298,23 @@ const book = {
   chapterOpeners: plan.layout.chapterOpeners,
   style: plan.theme.id,
   themeOverrides: config.themeOverrides ?? {},
+  fontTheme: config.fontTheme,
   selectedCoverRoute: plan.layout.coverRoute,
   bodyColumns: plan.layout.bodyColumns,
-  fontMode: config.fontMode ?? "system"
+  fontMode: normalizeThemeFontMode(config.fontMode)
 };
 
 if (!book.title || !book.author) throw new Error("book.json must include non-empty title and author.");
+const activeTheme = getTheme(book.style);
+const activeFontTheme = resolveBookFontTheme({
+  theme: activeTheme,
+  fontTheme: book.fontTheme,
+  fontOverrides: config.fontOverrides,
+  projectRoot: resolvedPaths.projectRoot,
+  outputDir,
+  fontMode: book.fontMode
+});
+const themeFonts = prepareThemeFonts(book.fontMode === "system" ? null : activeFontTheme);
 const matchingManuscriptTitle = parsed.metadata.find((entry) => entry.title === book.title);
 
 function firstContentBlock(chapter) {
@@ -370,14 +399,8 @@ for (const chapter of parsed.chapters) {
   chapter.tailText = clipText(closer || sourceTailText(chapter));
 }
 
-function fontLinks() {
-  const remoteApproved = hasPlanException(plan, "allow-remote-fonts");
-  return book.fontMode === "remote" && (!plan || remoteApproved) ? renderThemeFontLinks(getTheme(book.style)) : "";
-}
-
 function themeCss() {
-  const theme = getTheme(book.style);
-  const colors = themeColors(theme, book.themeOverrides);
+  const colors = themeColors(activeTheme, book.themeOverrides);
   const heading = colors.heading ?? colors.ink;
   const deck = colors.deck ?? colors.steel;
   const muted = colors.muted;
@@ -408,9 +431,9 @@ function themeCss() {
   --cover-art-aspect: ${coverArtAspect};
   --rule: ${rule};
   --callout-bg: ${callout};
-  --font-display: ${themeFontStack(theme, "display")};
-  --font-body: ${themeFontStack(theme, "body")};
-  --font-ui: ${themeFontStack(theme, "ui")};
+  --font-display: ${themeFontStack(activeFontTheme, "display")};
+  --font-body: ${themeFontStack(activeFontTheme, "body")};
+  --font-ui: ${themeFontStack(activeFontTheme, "ui")};
   --page-margin-top: 0.72in;
   --page-margin-bottom: 0.72in;
   --page-margin-inner: 0.78in;
@@ -693,8 +716,7 @@ function renderCoverOptions() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(book.title)} Cover Options</title>
-  ${fontLinks()}
-  <style>${themeCss()}\n${baseCss}\n${bookCss()}</style>
+  <style>${themeFonts.css}\n${themeCss()}\n${baseCss}\n${bookCss()}</style>
 </head>
 <body>
   <main class="book-shell">
@@ -734,8 +756,7 @@ function renderBook() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(book.title)} by ${escapeHtml(book.author)}</title>
-  ${fontLinks()}
-  <style>${themeCss()}\n${baseCss}\n${bookCss()}</style>
+  <style>${themeFonts.css}\n${themeCss()}\n${baseCss}\n${bookCss()}</style>
 </head>
 <body>
   <div class="book-controls screen-only" aria-label="Book controls">
@@ -753,6 +774,7 @@ function renderBook() {
 
 
 const manifestFiles = [manifestEntry, manifestCoverOptions];
+manifestFiles.push(...themeFonts.files);
 const coverAsset = localAssetManifestPath(book.coverImage, "coverImage");
 if (coverAsset) manifestFiles.push(coverAsset);
 parsed.parts.forEach((part, index) => {
@@ -764,10 +786,9 @@ parsed.assetReferences.forEach((reference, index) => {
   if (asset) manifestFiles.push(asset);
 });
 const allowlistedFiles = [...new Set(manifestFiles)];
-
-writeFileSync(outputPath, renderBook());
-writeFileSync(coverOptionsPath, renderCoverOptions());
-writeFileSync(buildManifestPath, JSON.stringify({
+const renderedBook = renderBook();
+const renderedCoverOptions = renderCoverOptions();
+const renderedBuildManifest = JSON.stringify({
   schemaVersion: 2,
   entry: manifestEntry,
   coverOptions: manifestCoverOptions,
@@ -796,14 +817,14 @@ writeFileSync(buildManifestPath, JSON.stringify({
     threshold: parsed.sourceManifest.threshold,
     blocks: parsed.sourceManifest.blocks.map(({ id, kind, wordCount, sha256 }) => ({ id, kind, wordCount, sha256 }))
   }
-}, null, 2));
-writeFileSync(buildSummaryPath, JSON.stringify({
+}, null, 2);
+const renderedBuildSummary = JSON.stringify({
   title: book.title,
   author: book.author,
   chapters: parsed.chapters.length,
   parts: parsed.parts.length,
   sourceWords: wordCount(manuscript),
-  outputHtml: relative(outputDir, outputPath),
+  outputHtml: portableRelativePath(outputDir, outputPath),
   cover: {
     asset: coverAsset,
     route: book.selectedCoverRoute,
@@ -817,10 +838,10 @@ writeFileSync(buildSummaryPath, JSON.stringify({
     count: compiledPlan.receipt.featurePages.length,
     kinds: compiledPlan.receipt.featurePages.map((feature) => feature.kind)
   }
-}, null, 2));
-writeFileSync(sourceInventoryPath, JSON.stringify(createSourceInventory(parsed), null, 2));
-writeFileSync(planReceiptPath, JSON.stringify(compiledPlan.receipt, null, 2));
-writeFileSync(coverReceiptPath, JSON.stringify({
+}, null, 2);
+const renderedSourceInventory = JSON.stringify(createSourceInventory(parsed), null, 2);
+const renderedPlanReceipt = JSON.stringify(compiledPlan.receipt, null, 2);
+const renderedCoverReceipt = JSON.stringify({
   schemaVersion: 1,
   requestHash: expectedCoverRequest.requestHash,
   generationReceiptHash: sha256(coverGenerationReceipt),
@@ -834,7 +855,40 @@ writeFileSync(coverReceiptPath, JSON.stringify({
   frame: coverAssetReport.frame,
   effectiveDpi: coverAssetReport.effectiveDpi,
   minimumDpi: coverAssetReport.minimumDpi
-}, null, 2));
+}, null, 2);
+
+const generatedFileContents = new Map([
+  [manifestEntry, renderedBook],
+  [manifestCoverOptions, renderedCoverOptions],
+  [portableRelativePath(outputDir, buildManifestPath), renderedBuildManifest],
+  [portableRelativePath(outputDir, buildSummaryPath), renderedBuildSummary],
+  [portableRelativePath(outputDir, sourceInventoryPath), renderedSourceInventory],
+  [portableRelativePath(outputDir, planReceiptPath), renderedPlanReceipt],
+  [portableRelativePath(outputDir, coverReceiptPath), renderedCoverReceipt]
+]);
+const stageContainer = mkdtempSync(resolve(outputDir, ".book-build-stage-"));
+const stageRoot = resolve(stageContainer, "next");
+
+try {
+  mkdirSync(stageRoot);
+  for (const [target, contents] of generatedFileContents) {
+    const stagedPath = resolve(stageRoot, target);
+    mkdirSync(dirname(stagedPath), { recursive: true });
+    writeFileSync(stagedPath, contents);
+  }
+  stageThemeFonts(themeFonts, stageRoot);
+  publishGeneratedTargets({
+    outputDir,
+    stageRoot,
+    targets: [...generatedFileContents.keys(), FONT_OUTPUT_ROOT]
+  });
+} finally {
+  try {
+    rmSync(stageContainer, { recursive: true, force: true });
+  } catch {
+    // Staging is no longer live state; cleanup must not mask publication success or its primary failure.
+  }
+}
 
 console.log(JSON.stringify({
   html: outputPath,

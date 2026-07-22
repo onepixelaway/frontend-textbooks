@@ -23,7 +23,7 @@ function assertNoSymlinkComponents(root, candidate, label) {
   }
 }
 
-function canonicalProspectivePath(path) {
+export function canonicalProspectivePath(path) {
   let existing = path;
   const tail = [];
   while (!existsSync(existing)) {

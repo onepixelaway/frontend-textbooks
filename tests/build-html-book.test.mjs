@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -185,6 +185,30 @@ The diagram is part of the manuscript.
   assert.ok(manifest.files.includes("assets/body.png"));
 });
 
+test("builder reserves assets/fonts before publication and preserves existing output", async () => {
+  const paths = await fixture({ partImages: {}, requirePartImages: false }, `# Proof Book
+
+## Chapter
+
+The manuscript references a reserved asset.
+
+![Reserved sentinel](assets/fonts/sentinel.txt)`);
+  const sentinelPath = join(paths.outputDir, "assets", "fonts", "sentinel.txt");
+  const previousHtml = "previous generated html";
+  await mkdir(join(paths.outputDir, "assets", "fonts"), { recursive: true });
+  await writeFile(sentinelPath, "keep this sentinel");
+  await writeFile(join(paths.outputDir, "index.html"), previousHtml);
+
+  await assert.rejects(
+    execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]),
+    /reserved generated font namespace assets\/fonts/i
+  );
+
+  assert.equal(await readFile(sentinelPath, "utf8"), "keep this sentinel");
+  assert.equal(await readFile(join(paths.outputDir, "index.html"), "utf8"), previousHtml);
+  await assert.rejects(readFile(join(paths.outputDir, "book-build-manifest.json")), /ENOENT/u);
+});
+
 test("manifesting rejects local assets that traverse outside outputDir", async () => {
   const paths = await fixture({ coverImage: "../outside.png", requirePartImages: false, partImages: {} });
   await writeFile(join(paths.root, "outside.png"), "outside");
@@ -272,6 +296,64 @@ test("theme overrides merge known validated colors into the selected preset", as
   assert.match(html, /--accent: #009C3B;/);
   assert.match(html, /--soft-accent: #F2C500;/);
   assert.match(html, /--cover-band: #003F88;/);
+});
+
+test("fontTheme applies another registered typography pack without changing the color theme", async () => {
+  const paths = await fixture({
+    partImages: {},
+    requirePartImages: false,
+    style: "colbalt",
+    fontTheme: "alumni"
+  });
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
+  const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+  const manifest = JSON.parse(await readFile(join(paths.outputDir, "book-build-manifest.json"), "utf8"));
+
+  assert.match(html, /--heading-ink: #0A3695;/);
+  assert.match(html, /--font-display: "Bricolage Grotesque"/);
+  assert.match(html, /--font-body: "Fraunces"/);
+  assert.match(html, /assets\/fonts\/alumni\/BricolageGrotesque-Variable\.ttf/);
+  assert.ok(manifest.files.includes("assets/fonts/alumni/Fraunces-Variable.ttf"));
+  assert.ok(!manifest.files.some((path) => path.startsWith("assets/fonts/colbalt/")));
+});
+
+test("fontOverrides publish a user-requested local Google Fonts bundle", async () => {
+  const paths = await fixture({
+    partImages: {},
+    requirePartImages: false,
+    style: "colbalt",
+    fontOverrides: {
+      sourceDirectory: "book-fonts",
+      display: { family: "Bricolage Grotesque", fallback: "sans-serif" },
+      body: { family: "Fraunces", fallback: "serif" },
+      ui: { family: "Bricolage Grotesque", fallback: "sans-serif" },
+      faces: [
+        { family: "Bricolage Grotesque", weight: "200 800", file: "Bricolage.ttf" },
+        { family: "Fraunces", weight: "100 900", file: "Fraunces.ttf" }
+      ],
+      licenses: [
+        { family: "Bricolage Grotesque", file: "Bricolage-OFL.txt" },
+        { family: "Fraunces", file: "Fraunces-OFL.txt" }
+      ]
+    }
+  });
+  const fontDirectory = join(paths.root, "book-fonts");
+  await mkdir(fontDirectory);
+  await Promise.all([
+    copyFile(new URL("../themes/alumni/fonts/BricolageGrotesque-Variable.ttf", import.meta.url), join(fontDirectory, "Bricolage.ttf")),
+    copyFile(new URL("../themes/alumni/fonts/Fraunces-Variable.ttf", import.meta.url), join(fontDirectory, "Fraunces.ttf")),
+    copyFile(new URL("../themes/alumni/fonts/BricolageGrotesque-OFL.txt", import.meta.url), join(fontDirectory, "Bricolage-OFL.txt")),
+    copyFile(new URL("../themes/alumni/fonts/Fraunces-OFL.txt", import.meta.url), join(fontDirectory, "Fraunces-OFL.txt"))
+  ]);
+
+  await execFileAsync(process.execPath, [builder.pathname, paths.configPath, paths.manuscriptPath, paths.planPath]);
+  const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
+  const manifest = JSON.parse(await readFile(join(paths.outputDir, "book-build-manifest.json"), "utf8"));
+
+  assert.match(html, /--font-display: "Bricolage Grotesque", sans-serif/);
+  assert.match(html, /assets\/fonts\/custom\/Bricolage\.ttf/);
+  assert.ok(manifest.files.includes("assets/fonts/custom/Fraunces-OFL.txt"));
+  assert.ok((await stat(join(paths.outputDir, "assets/fonts/custom/Fraunces.ttf"))).size > 100_000);
 });
 
 test("theme overrides reject unknown keys and unsafe CSS values", async (t) => {

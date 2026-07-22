@@ -21,9 +21,15 @@ book-title/
     cover.png
     chapter-01-opener.png
     figure-03-system-map.svg
+    fonts/
+      colbalt/
+        Poppins-Bold.ttf
+        Halant-Regular.ttf
+        Poppins-OFL.txt
+        Halant-OFL.txt
 ```
 
-The HTML and PDF may sit together, but every completed book also has at least the required local cover bitmap and its generation/request receipts.
+The HTML and PDF may sit together, but every completed book also has at least the required local cover bitmap and its generation/request receipts. Generated builds take typography from the active theme, an independent registered `fontTheme`, or a config-relative `fontOverrides` bundle; all three routes emit local assets and use the same HTML/PDF source.
 
 ## Base HTML
 
@@ -35,12 +41,24 @@ The HTML and PDF may sit together, but every completed book also has at least th
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Book Title</title>
 
-  <!-- Default colbalt theme: Poppins Bold headings/UI and Halant body from Google Fonts. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Halant:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
-
   <style>
+    /* Generated builds emit every face declared by the active theme. */
+    @font-face {
+      font-family: "Poppins";
+      src: url("assets/fonts/colbalt/Poppins-Bold.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 700;
+      font-display: block;
+    }
+
+    @font-face {
+      font-family: "Halant";
+      src: url("assets/fonts/colbalt/Halant-Regular.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 400;
+      font-display: block;
+    }
+
     /* === THEME TOKENS: scaffold defaults live in themes/colbalt/index.mjs === */
     :root {
       --browser-bg: #d8d4cb;

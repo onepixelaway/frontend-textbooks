@@ -5,21 +5,23 @@
 - Infer book type from the source: textbook for instructional material, manual for procedural material, field guide for compact reference, coffee-table/editorial for evocative or image-led work.
 - Use the supplied author. Ask only when no reliable author is available before final export. Never invent an imprint.
 - Use diagrams freely. A newly generated cover bitmap is mandatory for every edition, including plain readers and user-supplied-image projects. Additional generated interior images remain optional when useful.
-- Treat `colbalt` as the runtime fallback for legacy or direct configs, not the interactive workflow's silent choice. Every new book pauses for the color-scheme decision below.
+- Treat `colbalt` as the runtime fallback for legacy or direct configs, not the interactive workflow's silent choice. Every new book pauses for the color-and-typography decision below.
 
-## Color-scheme decision
+## Color and typography decision
 
 Make this decision after manuscript analysis and source inventory, before writing `book-plan.json`. Consider the manuscript's subject, tone, audience, and cultural context. Prefer an editorial relationship to the material over a literal flag palette, genre cliché, or trendy gradient.
 
-Ask one blocking question with three numbered choices:
+Ask one blocking question with three numbered visual-system choices:
 
 1. Put the strongest manuscript-grounded recommendation first and label it **Recommended**.
 2. Offer a restrained alternative with a meaningfully different temperature or contrast.
 3. Offer an expressive alternative that remains credible for long-form reading.
 
-For each choice, provide a short memorable name, one sentence connecting it to the content, and five or six representative role-based hex swatches such as paper, ink, heading, accent, soft accent, and cover band. Do not ask the user to choose individual tokens. Include a palette the user supplied earlier as one option, and always allow a different direction. Ask which scheme they want and wait; do not silently choose a default or continue to plan, generate cover art, or build.
+For each choice, provide a short memorable name, one sentence connecting it to the content, five or six representative role-based hex swatches, and a display/body typography pairing identified by its registered `fontTheme`. Do not ask the user to choose individual tokens. Include a palette or bundled typeface the user supplied earlier, allow them to mix one listed palette with another listed typography pack, and always allow a different direction. Ask which visual system they want and wait; do not silently choose a default or continue to plan, generate cover art, or build.
 
-After the answer, choose the closest registered base from `themes/index.mjs` for typography and image-prompt behavior. Write that ID to `book.json.style`, then express the selected color system with known `themeOverrides` keys and valid hex colors. Fill supporting roles coherently, preserve readable ink/paper and title/art contrast, and avoid overrides when the chosen registered theme already matches. `book.json` remains the palette source of truth; `book-plan.json.theme.rationale` records that this was the user-selected color scheme and why it suits the manuscript. Runtime prompt compilation merges the same resolved colors into the theme's dedicated palette slot, so custom schemes apply to both the book and its artwork.
+After the answer, choose the closest registered base from `themes/index.mjs` for color and image-prompt behavior. Write that ID to `book.json.style`, express the color system with known `themeOverrides` keys, and write the selected bundled typography ID to `fontTheme` when it differs from `style`. The active theme's fonts remain the default when `fontTheme` is omitted. `book.json` remains the visual-system source of truth; `book-plan.json.theme.rationale` records why the user-selected color and typography suit the manuscript. Runtime prompt compilation uses only resolved colors, while the builder uses the independently resolved bundled typography.
+
+Inspect registered packs with `node "$SKILL_DIR/scripts/font-catalog.mjs"`. If the user requests a Google Fonts family that no registered pack provides, do not silently substitute it or hand-author guessed metadata. Use `node "$SKILL_DIR/scripts/acquire-google-fonts.mjs" --example`, pin the request to an immutable official `google/fonts` commit, and run the helper with `--project-root` and `--request`. Copy its returned `fontOverrides` into `book.json`; do not also set `fontTheme`. Keep `fontMode` bundled so the pipeline copies, fingerprints, manifests, and verifies the custom local bundle without network access.
 
 ## Content architecture
 

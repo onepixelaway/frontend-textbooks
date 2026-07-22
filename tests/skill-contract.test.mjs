@@ -38,7 +38,7 @@ test("theme prompt prose has one executable source of truth", async () => {
   assert.equal(files.filter((file) => file.includes(signature)).length, 1);
 });
 
-test("workflow pauses for a topic-aware user color-scheme choice", async () => {
+test("workflow pauses for a topic-aware user color and typography choice", async () => {
   const [skill, intake, reasoning, metadata, readme] = await Promise.all([
     readFile(new URL("SKILL.md", root), "utf8"),
     readFile(new URL("references/intake-and-planning.md", root), "utf8"),
@@ -47,18 +47,28 @@ test("workflow pauses for a topic-aware user color-scheme choice", async () => {
     readFile(new URL("README.md", root), "utf8")
   ]);
 
-  assert.match(skill, /three numbered color-scheme choices/i);
+  assert.match(skill, /three numbered visual-system choices/i);
   assert.match(skill, /mark one as recommended/i);
   assert.match(skill, /wait for the user's answer/i);
   assert.match(skill, /style.*themeOverrides/is);
-  assert.match(skill, /resolved colors govern both page CSS and the compiled palette section/i);
+  assert.match(skill, /fontTheme/i);
+  assert.match(skill, /scripts\/font-catalog\.mjs/u);
+  assert.match(skill, /scripts\/acquire-google-fonts\.mjs/u);
+  assert.match(skill, /never invent face filenames, weights, or license records/i);
+  assert.match(skill, /requested (?:font|typeface)/i);
+  assert.match(skill, /resolved colors govern page CSS and artwork prompts/i);
   assert.doesNotMatch(skill, /Use the default `colbalt` theme unless/i);
   assert.match(intake, /subject, tone, audience, and cultural context/i);
   assert.match(intake, /do not silently choose a default/i);
-  assert.match(intake, /custom schemes apply to both the book and its artwork/i);
+  assert.match(intake, /runtime prompt compilation uses only resolved colors/i);
+  assert.match(intake, /fontTheme/i);
+  assert.match(intake, /bundled typography/i);
+  assert.match(intake, /scripts\/font-catalog\.mjs/u);
+  assert.match(intake, /scripts\/acquire-google-fonts\.mjs/u);
   assert.match(reasoning, /user-selected color scheme/i);
-  assert.match(metadata, /color scheme/i);
-  assert.match(readme, /recommend a topic-aware color scheme/i);
+  assert.match(metadata, /color and typography system/i);
+  assert.match(readme, /recommend three manuscript-grounded visual systems/i);
+  assert.match(readme, /typography/i);
 });
 
 test("instructions, metadata, and schemas agree that original cover artwork is mandatory", async () => {
