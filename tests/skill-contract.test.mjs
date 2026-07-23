@@ -71,6 +71,38 @@ test("workflow pauses for a topic-aware user color and typography choice", async
   assert.match(readme, /typography/i);
 });
 
+test("intake accepts only explicit author provenance", async () => {
+  const [skill, intake] = await Promise.all([
+    readFile(new URL("SKILL.md", root), "utf8"),
+    readFile(new URL("references/intake-and-planning.md", root), "utf8")
+  ]);
+
+  for (const instructions of [skill, intake]) {
+    assert.match(instructions, /explicit manuscript byline/i);
+    assert.match(instructions, /direct user statement/i);
+    assert.match(instructions, /workspace paths?/i);
+    assert.match(instructions, /not (?:a )?reliable/i);
+    assert.match(instructions, /ask/i);
+  }
+  assert.match(intake, /Git identity/i);
+  assert.match(intake, /never infer the author/i);
+});
+
+test("repairs are batched through affected verification before full finalization", async () => {
+  const [skill, iteration] = await Promise.all([
+    readFile(new URL("SKILL.md", root), "utf8"),
+    readFile(new URL("references/iteration.md", root), "utf8")
+  ]);
+
+  for (const instructions of [skill, iteration]) {
+    assert.match(instructions, /every independent actionable task/i);
+    assert.match(instructions, /affected verification/i);
+    assert.match(instructions, /full/i);
+  }
+  assert.match(skill, /Do not rerender after each action/i);
+  assert.match(iteration, /Do not run `full` between individual actions/i);
+});
+
 test("instructions, metadata, and schemas agree that original cover artwork is mandatory", async () => {
   const [skill, metadata, configSchema, planSchema, artifactSchema] = await Promise.all([
     readFile(new URL("SKILL.md", root), "utf8"),

@@ -3,7 +3,7 @@
 ## Intake defaults
 
 - Infer book type from the source: textbook for instructional material, manual for procedural material, field guide for compact reference, coffee-table/editorial for evocative or image-led work.
-- Use the supplied author. Ask only when no reliable author is available before final export. Never invent an imprint.
+- Use an author only when it appears in an explicit manuscript byline, user-supplied metadata, or a direct user statement. Workspace paths, local account names, Git identity, filesystem ownership, and unrelated prior projects are not reliable evidence. When none of the reliable sources supplies a byline, ask the user before creating `book.json`; never infer the author or invent an imprint.
 - Use diagrams freely. A newly generated cover bitmap is mandatory for every edition, including plain readers and user-supplied-image projects. Additional generated interior images remain optional when useful.
 - Treat `colbalt` as the runtime fallback for legacy or direct configs, not the interactive workflow's silent choice. Every new book pauses for the color-and-typography decision below.
 

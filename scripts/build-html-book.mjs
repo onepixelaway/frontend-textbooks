@@ -515,8 +515,8 @@ body { font-size: 10.7pt; }
 .scorecard-side h2 { margin: 0 0 0.06in; font-size: 25pt; line-height: 1; }
 .scorecard-descriptor { margin: 0 0 0.18in; font: 800 7.4pt/1.3 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--label-ink); text-indent: 0; }
 .scorecard-metrics { display: grid; align-content: stretch; }
-.scorecard-metric { display: grid; grid-template-columns: minmax(0, 0.9in) minmax(0, 1fr); gap: 0.14in; align-items: baseline; padding: 0.14in 0; border-top: 1px solid var(--rule); }
-.scorecard-metric strong { font: 900 21pt/1 var(--font-display); color: var(--heading-ink); overflow-wrap: anywhere; }
+.scorecard-metric { display: grid; grid-template-columns: minmax(1.3in, 0.95fr) minmax(1.15in, 1.05fr); gap: 0.14in; align-items: baseline; padding: 0.14in 0; border-top: 1px solid var(--rule); }
+.scorecard-metric strong { min-width: 0; font: 900 21pt/1 var(--font-display); color: var(--heading-ink); overflow-wrap: normal; word-break: normal; hyphens: none; }
 .scorecard-metric span { font: 700 8pt/1.3 var(--font-ui); letter-spacing: 0.045em; text-transform: uppercase; color: var(--muted-ink); }
 .scorecard-verdict { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.24in; align-items: center; margin: 0; padding-top: 0.2in; border-top: 0.04in solid var(--soft-accent); font-size: 13pt; line-height: 1.35; text-indent: 0; }
 .scorecard-verdict strong { font: 900 42pt/0.8 var(--font-display); color: var(--accent); }
@@ -596,6 +596,7 @@ body { font-size: 10.7pt; }
   .framework-grid, .scorecard-grid, .numbers-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
   .framework-item { min-height: 0; }
   .framework-footer { grid-template-columns: 0.35fr auto 0.35fr; }
+  .scorecard-metric { grid-template-columns: minmax(0, 1fr); gap: 0.35rem; align-items: start; }
   .scorecard-verdict, .numbers-highlight { grid-template-columns: 1fr; }
   .scorecard-verdict strong, .numbers-highlight strong { font-size: 30pt; }
   .diagram-flow, .diagram-layout-comparison, .diagram-layout-matrix { grid-template-columns: 1fr; }

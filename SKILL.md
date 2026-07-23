@@ -37,7 +37,7 @@ The model owns judgment: audience and genre, user-facing color and typography re
 
 ### 1. Prepare inputs
 
-Create `book.json` and retain the source manuscript as Markdown. Author, title, and a config-relative `coverImage` target inside `outputDir` are required. Relative paths always resolve from the directory containing `book.json`. Leave `style`, `themeOverrides`, `fontTheme`, and `fontOverrides` unresolved until the visual-system decision in step 2.
+Create `book.json` and retain the source manuscript as Markdown. Author, title, and a config-relative `coverImage` target inside `outputDir` are required. Accept an author only from an explicit manuscript byline, user-supplied metadata, or a direct user statement; workspace paths, account names, Git identity, and unrelated prior projects are not reliable author sources. If no reliable author is available, ask for the byline before writing `book.json`. Relative paths always resolve from the directory containing `book.json`. Leave `style`, `themeOverrides`, `fontTheme`, and `fontOverrides` unresolved until the visual-system decision in step 2.
 
 Treat H1 as book metadata, H2 as chapters, and H3/H4 as interior sections. Use `### Chapter title {chapter}` only when an H3 must explicitly start a chapter; empty chapters are invalid. Use `themeOverrides` for validated palette adaptations. Set `selectedCoverRoute` to `photo` or `minimal`; the same route drives the option and final cover.
 
@@ -102,9 +102,9 @@ Unchanged inputs reuse content-hashed results. Use `--force true` only when test
 
 ### 6. Handle targeted repairs
 
-On failure, read `.verification/repair-tasks.json`, its bounded source context, referenced screenshots, and only the named plan selections. Return `repair-actions.json` matching `schemas/repair-actions.schema.json`, validate it with `node "$SKILL_DIR/scripts/book-contract.mjs" validate-repairs .verification/repair-tasks.json repair-actions.json`, then make only the validated scoped change. Do not reload the full manuscript or full render report unless the repair packet is insufficient.
+On failure, read `.verification/repair-tasks.json`, its bounded source context, referenced screenshots, and only the named plan selections. Cover every independent actionable task that can be safely resolved in one `repair-actions.json`, validate the complete batch with `node "$SKILL_DIR/scripts/book-contract.mjs" validate-repairs .verification/repair-tasks.json repair-actions.json`, then apply the validated scoped changes together. Do not rerender after each action or reload the full manuscript or full render report unless the repair packet is insufficient.
 
-Use `.verification/diagnostics.json` for exact codes and measurements. Full evidence stays on disk; keep chat and command output compact.
+After each repair batch, run `verify --tier affected`. Repeat batched repair and affected verification until it passes; only then run `finalize --tier full` once. If finalization exposes a new repairable issue, batch the new tasks and return to affected verification before finalizing again. Use `.verification/diagnostics.json` for exact codes and measurements. Full evidence stays on disk; keep chat and command output compact.
 
 ### 7. Perform the visual judgment
 

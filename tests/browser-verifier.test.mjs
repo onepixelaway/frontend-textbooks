@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import test, { after } from "node:test";
 import { chromium } from "playwright";
@@ -214,8 +215,13 @@ The measured rates are 0.68 versus 0.59, while the best observed rates are 0.96 
     }
   });
   const paragraphIds = project.parsed.sourceManifest.blocks.filter((block) => block.kind === "p").map((block) => block.id);
+  const comparison = scorecardFeature(paragraphIds, { anchorSourceBlockId: paragraphIds[0] });
+  comparison.sides[0].metrics = [
+    { value: "Low density", label: "Observed concentration" },
+    { value: "Water + forage", label: "Primary resources" }
+  ];
   project.plan.visuals.featurePages = [
-    scorecardFeature(paragraphIds, { anchorSourceBlockId: paragraphIds[0] }),
+    comparison,
     frameworkFeature(paragraphIds, { anchorSourceBlockId: paragraphIds[1] }),
     numbersFeature(paragraphIds, { anchorSourceBlockId: paragraphIds[2] })
   ];
@@ -817,6 +823,33 @@ test("structured scorecard, framework, and numbers pages are additive, responsiv
   assert.deepEqual(receipt.featurePages.map(({ kind }) => kind), ["scorecard", "framework", "numbers"]);
   assert.ok(receipt.featurePages.every((feature) => feature.chapterId === "a-richer-chapter"));
   assert.deepEqual(receipt.featurePages.flatMap((feature) => feature.sourceBlockIds).filter((id, index, ids) => ids.indexOf(id) === index), project.paragraphIds);
+
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.goto(pathToFileURL(join(project.outputDir, "index.html")).href);
+    await page.waitForFunction(() => window.__BOOK_READY === true);
+    const metrics = await page.locator(".scorecard-metric").evaluateAll((rows) => rows.map((row) => {
+      const value = row.querySelector("strong");
+      const label = row.querySelector("span");
+      const style = getComputedStyle(value);
+      return {
+        value: value.textContent,
+        overflowWrap: style.overflowWrap,
+        wordBreak: style.wordBreak,
+        hyphens: style.hyphens,
+        valueTop: value.getBoundingClientRect().top,
+        labelTop: label.getBoundingClientRect().top
+      };
+    }));
+    assert.deepEqual(metrics.slice(0, 2).map(({ value }) => value), ["Low density", "Water + forage"]);
+    assert.ok(metrics.every(({ overflowWrap, wordBreak, hyphens }) =>
+      overflowWrap === "normal" && wordBreak === "normal" && hyphens === "none"
+    ));
+    assert.ok(metrics.every(({ valueTop, labelTop }) => labelTop > valueTop), "mobile scorecard values and labels should stack");
+  } finally {
+    await browser.close();
+  }
 });
 
 test("multi-page two- and three-column books preserve ordered source text in PDF", async (t) => {
