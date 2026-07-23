@@ -1,5 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "generator": "frontend-textbooks/theme-gallery",
   "article": {
     "url": "https://dribbble.com/stories/2020/06/10/free-font-combinations",
     "writer": "Renee Fleck",
@@ -106,7 +107,8 @@
         "cover.png",
         "control-audit.png",
         "agency-plan.png"
-      ]
+      ],
+      "screenshotSourceHash": "dfa5defc8dbafd87d2e32e681dbfe9541973318417b6ad114e5e6e44e6931ca7"
     },
     {
       "id": "regina-poppins",
@@ -210,7 +212,8 @@
         "cover.png",
         "control-audit.png",
         "agency-plan.png"
-      ]
+      ],
+      "screenshotSourceHash": "f926c8234bc0686485e7fcc8ce8c7ae2391fc8351068d9b48dec95855db440cf"
     },
     {
       "id": "monument-space",
@@ -314,7 +317,8 @@
         "cover.png",
         "control-audit.png",
         "agency-plan.png"
-      ]
+      ],
+      "screenshotSourceHash": "ad967672b6ed136b77525c89e80341075b0a4752350f4fc3fc77755d87b2540c"
     },
     {
       "id": "sporting-agrandir",
@@ -418,7 +422,8 @@
         "cover.png",
         "control-audit.png",
         "agency-plan.png"
-      ]
+      ],
+      "screenshotSourceHash": "a7f73a671e2139ba35cc077096cd1a2cb0f30eaa308173deee6a46ec3f64d7c1"
     },
     {
       "id": "millimetre-mondwest",
@@ -522,7 +527,8 @@
         "cover.png",
         "control-audit.png",
         "agency-plan.png"
-      ]
+      ],
+      "screenshotSourceHash": "72702c281786a4e8326bcda1fcc921734eb7072f09f082edfad3353b7418c590"
     }
   ]
 }

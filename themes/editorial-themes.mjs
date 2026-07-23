@@ -95,13 +95,8 @@ function googleFontSource(family, repositoryPath, license = "OFL-1.1") {
   };
 }
 
-function withPendingImagePrompt(theme) {
-  if (theme.imagePrompt) return theme;
-  return { ...theme, imagePrompt: null, imagePromptStatus: "pending-user-supplied" };
-}
-
 const editorialThemes = [
-  withPendingImagePrompt({
+  {
     id: "mazius-libre",
     aliases: ["brutal-elegance", "mazius-libre-baskerville"],
     name: "Brutal Elegance — Mazius + Libre Baskerville",
@@ -175,8 +170,8 @@ const editorialThemes = [
       ],
       template: maziusLibreImagePromptTemplate
     }
-  }),
-  withPendingImagePrompt({
+  },
+  {
     id: "regina-poppins",
     aliases: ["funkadelic", "regina-black-poppins"],
     name: "Funkadelic — Regina Black + Poppins",
@@ -249,8 +244,8 @@ const editorialThemes = [
       ],
       template: reginaPoppinsImagePromptTemplate
     }
-  }),
-  withPendingImagePrompt({
+  },
+  {
     id: "monument-space",
     aliases: ["fighting-robots", "monument-extended-space-mono"],
     name: "Fighting Robots — Monument Extended + Space Mono",
@@ -323,8 +318,8 @@ const editorialThemes = [
       ],
       template: monumentSpaceImagePromptTemplate
     }
-  }),
-  withPendingImagePrompt({
+  },
+  {
     id: "sporting-agrandir",
     aliases: ["weird-relaxed", "sporting-grotesque-agrandir"],
     name: "Weird Yet Relaxed — Sporting Grotesque + Agrandir",
@@ -403,8 +398,8 @@ const editorialThemes = [
       ],
       template: sportingAgrandirImagePromptTemplate
     }
-  }),
-  withPendingImagePrompt({
+  },
+  {
     id: "millimetre-mondwest",
     aliases: ["technical-specs"],
     name: "Technical Specs — Millimetre + Mondwest",
@@ -487,7 +482,7 @@ const editorialThemes = [
       ],
       template: millimetreMondwestImagePromptTemplate
     }
-  })
+  }
 ];
 
 export default editorialThemes;

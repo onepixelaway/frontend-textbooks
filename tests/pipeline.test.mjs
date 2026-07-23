@@ -92,6 +92,7 @@ test("cache keys include custom font bytes and republish changed faces", async (
   await copyFile(join(repository, "themes", "alumni", "fonts", "BricolageGrotesque-OFL.txt"), join(sourceDirectory, "OFL.txt"));
 
   const config = JSON.parse(await readFile(paths.configPath));
+  config.fontMode = "bundled";
   config.fontOverrides = {
     sourceDirectory: "book-fonts",
     display: { family: "Book Sans", fallback: "sans-serif" },
@@ -383,6 +384,13 @@ test("validation rejects stale plans and unreasoned policy bypasses", async (t) 
     const config = JSON.parse(await readFile(paths.configPath));
     config.fontMode = "remote";
     await writeFile(paths.configPath, JSON.stringify(config));
+    const plan = JSON.parse(await readFile(paths.planPath));
+    plan.exceptions.push({
+      rule: "allow-remote-fonts",
+      scope: "book",
+      rationale: "Preserve compatibility with the plan that accompanied the legacy remote configuration."
+    });
+    await writeFile(paths.planPath, JSON.stringify(plan));
     await run(paths);
     const html = await readFile(join(paths.outputDir, "index.html"), "utf8");
     const manifest = JSON.parse(await readFile(join(paths.outputDir, "artifact-manifest.json"), "utf8"));
@@ -395,6 +403,7 @@ test("validation rejects stale plans and unreasoned policy bypasses", async (t) 
   await t.test("unregistered font theme", async () => {
     const paths = await fixture();
     const config = JSON.parse(await readFile(paths.configPath));
+    config.fontMode = "bundled";
     config.fontTheme = "missing-font-theme";
     await writeFile(paths.configPath, JSON.stringify(config));
     await assert.rejects(run(paths, "validate"), /fontTheme.*registered/i);

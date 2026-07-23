@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 
-import { copyFile, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import editorialThemes, { PAIRING_ARTICLE_CREDIT } from "../themes/editorial-themes.mjs";
-import { prepareThemeFonts } from "../themes/font-assets.mjs";
+import { prepareThemeFonts, themeFontFingerprint } from "../themes/font-assets.mjs";
+import { canonicalProspectivePath, isWithinPath } from "./lib/book-paths.mjs";
+import { sha256 } from "./lib/content-hash.mjs";
 import { publishGeneratedTargets } from "./lib/generated-publication.mjs";
 import { themeColors, themeFontStack } from "../themes/index.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 export const DEFAULT_THEME_SAMPLE_OUTPUT_DIRECTORY = join(repositoryRoot, "examples", "theme-gallery");
+export const THEME_GALLERY_GENERATOR = "frontend-textbooks/theme-gallery";
+export const THEME_GALLERY_SCHEMA_VERSION = 2;
 export const THEME_SAMPLE_PAGE_NAMES = Object.freeze(["cover", "control-audit", "agency-plan"]);
 const report = Object.freeze({
   title: "The Deliberate Life",
@@ -78,13 +82,14 @@ async function preserveScreenshot(source, destination) {
   try {
     stat = await lstat(source);
   } catch (error) {
-    if (error.code === "ENOENT") return;
+    if (error.code === "ENOENT") return false;
     throw error;
   }
   if (stat.isSymbolicLink() || !stat.isFile()) {
     throw new Error(`Existing theme screenshot must be a regular file: ${source}`);
   }
   await copyFile(source, destination);
+  return true;
 }
 
 async function resolvePromptExamples(theme, sampleDirectory) {
@@ -105,6 +110,57 @@ async function resolvePromptExamples(theme, sampleDirectory) {
     resolvedExamples.push({ ...example, path: webPath(relative(sampleDirectory, source)) });
   }
   return resolvedExamples;
+}
+
+export async function themeSampleSourceHash(
+  theme,
+  html,
+  promptExamples,
+  {
+    fontFingerprint = themeFontFingerprint,
+    readAsset = readFile
+  } = {}
+) {
+  const examples = await Promise.all(promptExamples.map(async ({ file }) => ({
+    path: `samples/${file}`,
+    sha256: sha256(await readAsset(join(repositoryRoot, "themes", theme.id, "samples", file)))
+  })));
+  return sha256({
+    html,
+    fonts: fontFingerprint(theme),
+    examples
+  });
+}
+
+async function mirrorAsset(source, stagedSampleDirectory, relativePath) {
+  const destination = resolve(stagedSampleDirectory, ".render-assets", relativePath);
+  if (!isWithinPath(stagedSampleDirectory, destination)) {
+    throw new Error(`Staged theme asset escapes its sample directory: ${destination}`);
+  }
+  await mkdir(dirname(destination), { recursive: true });
+  await copyFile(source, destination);
+}
+
+async function mirrorThemeAssets(theme, publishedSampleDirectory, stagedSampleDirectory, promptExamples, html) {
+  const fontDirectory = join(repositoryRoot, "themes", theme.id, "fonts");
+  await Promise.all((theme.fonts?.faces ?? []).map(({ file }) => mirrorAsset(
+    join(fontDirectory, file),
+    stagedSampleDirectory,
+    join("fonts", file)
+  )));
+
+  await Promise.all(promptExamples.map(({ file, path }) => mirrorAsset(
+    join(repositoryRoot, "themes", theme.id, "samples", file),
+    stagedSampleDirectory,
+    join("samples", file)
+  )));
+
+  const fontPrefix = `${webPath(relative(publishedSampleDirectory, fontDirectory))}/`;
+  let renderHtml = html.replaceAll(fontPrefix, ".render-assets/fonts/");
+  for (const example of promptExamples) {
+    renderHtml = renderHtml.replaceAll(escapeHtml(example.path), `.render-assets/samples/${example.file}`);
+  }
+  return renderHtml;
 }
 
 function themeCss(theme, sampleDirectory) {
@@ -514,11 +570,14 @@ ${agencyArtworkHtml}
 
 function galleryHtml(themes) {
   const cards = themes.map((theme) => {
-    const original = theme.inspiration.originalPairing.join(" + ");
-    const bundled = theme.inspiration.bundledPairing.join(" + ");
-    const colors = themeColors(theme);
+    const original = theme.originalPairing.join(" + ");
+    const bundled = theme.bundledPairing.join(" + ");
+    const hasCover = theme.screenshots.includes("cover.png");
+    const colors = theme.colors;
     return `<article class="theme-card" style="--card-page:${colors.page};--card-heading:${colors.heading};--card-accent:${colors.accent}">
-      <a class="preview" href="${theme.id}/index.html"><img src="${theme.id}/cover.png" alt="${escapeHtml(theme.name)} sample cover" width="408" height="528"></a>
+      <a class="preview" href="${theme.id}/index.html">${hasCover
+        ? `<img src="${theme.id}/cover.png" alt="${escapeHtml(theme.name)} sample cover" width="408" height="528">`
+        : '<span class="preview-placeholder">Open HTML preview</span>'}</a>
       <div class="card-copy"><span class="card-index">${String(theme.sampleIndex).padStart(2, "0")}</span><h2><a href="${theme.id}/index.html">${escapeHtml(theme.name.split(" — ")[0])}</a></h2><p>${escapeHtml(original)}</p>${original === bundled ? "" : `<small>Bundled as ${escapeHtml(bundled)}</small>`}</div>
     </article>`;
   }).join("\n");
@@ -542,6 +601,7 @@ function galleryHtml(themes) {
     .preview { display: block; overflow: hidden; aspect-ratio: 8.5 / 11; background: linear-gradient(145deg, var(--card-page), var(--card-heading)); box-shadow: 0 18px 45px #0007; }
     .preview img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease; }
     .preview:hover img { transform: scale(1.018); }
+    .preview-placeholder { display: grid; width: 100%; height: 100%; padding: 24px; place-items: center; color: var(--card-page); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
     .card-copy { position: relative; padding: 20px 38px 0 0; }
     .card-index { position: absolute; right: 0; color: var(--card-accent); font: 800 11px/1 system-ui; }
     h2 { margin: 0 0 7px; font-size: 20px; }
@@ -570,71 +630,199 @@ export function resolveThemeSampleOutputDirectory(arguments_) {
   return resolve(value);
 }
 
-export async function buildThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPLE_OUTPUT_DIRECTORY } = {}) {
+async function pathStat(path) {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function readGalleryManifest(outputDirectory, { required = false } = {}) {
+  const manifestPath = join(outputDirectory, "manifest.json");
+  const stat = await pathStat(manifestPath);
+  if (!stat) {
+    if (required) throw new Error(`Populated output directory is not an owned theme gallery: ${outputDirectory}`);
+    return null;
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`Theme gallery manifest must be a regular file: ${manifestPath}`);
+  }
+  try {
+    return JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (error) {
+    if (required) throw new Error(`Populated output directory is not an owned theme gallery: ${outputDirectory}`, { cause: error });
+    return null;
+  }
+}
+
+export async function assertThemeSampleOutputDirectory(outputDirectory) {
   const absoluteOutput = resolve(outputDirectory);
-  const outputParent = dirname(absoluteOutput);
+  const canonicalOutput = canonicalProspectivePath(absoluteOutput);
+  const canonicalRepository = canonicalProspectivePath(repositoryRoot);
+  const protectedDirectories = ["themes", "scripts", "node_modules", ".git"]
+    .map((name) => canonicalProspectivePath(join(repositoryRoot, name)));
+  if (
+    isWithinPath(canonicalOutput, canonicalRepository)
+    || protectedDirectories.some((directory) => isWithinPath(directory, canonicalOutput))
+  ) {
+    throw new Error(`Theme gallery output must not replace a protected repository or source directory: ${absoluteOutput}`);
+  }
+
+  const stat = await pathStat(absoluteOutput);
+  if (!stat) return absoluteOutput;
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error(`Theme gallery output must be a real directory: ${absoluteOutput}`);
+  }
+  if ((await readdir(absoluteOutput)).length === 0) return absoluteOutput;
+  if (canonicalOutput === canonicalProspectivePath(DEFAULT_THEME_SAMPLE_OUTPUT_DIRECTORY)) return absoluteOutput;
+
+  const manifest = await readGalleryManifest(absoluteOutput, { required: true });
+  if (
+    manifest.generator !== THEME_GALLERY_GENERATOR
+    || manifest.schemaVersion !== THEME_GALLERY_SCHEMA_VERSION
+  ) {
+    throw new Error(`Populated output directory is not an owned theme gallery: ${absoluteOutput}`);
+  }
+  return absoluteOutput;
+}
+
+function manifestDocument(themes) {
+  return {
+    schemaVersion: THEME_GALLERY_SCHEMA_VERSION,
+    generator: THEME_GALLERY_GENERATOR,
+    article: {
+      url: PAIRING_ARTICLE_CREDIT.url,
+      writer: PAIRING_ARTICLE_CREDIT.writer,
+      curator: PAIRING_ARTICLE_CREDIT.curator
+    },
+    report,
+    themes
+  };
+}
+
+export async function writeThemeSampleMetadata(stagedOutput, manifestThemes) {
+  await writeFile(join(stagedOutput, "index.html"), galleryHtml(manifestThemes));
+  await writeFile(join(stagedOutput, "manifest.json"), `${JSON.stringify(manifestDocument(manifestThemes), null, 2)}\n`);
+}
+
+export async function stageThemeSamples({
+  outputDirectory,
+  stageRoot,
+  preserveScreenshots = true,
+  mirrorAssets = false
+}) {
+  const absoluteOutput = resolve(outputDirectory);
   const outputTarget = basename(absoluteOutput);
+  const stagedOutput = join(stageRoot, outputTarget);
+  const sampleThemes = editorialThemes.map((theme, index) => ({ ...theme, sampleIndex: index + 1 }));
+  const previousManifest = preserveScreenshots ? await readGalleryManifest(absoluteOutput) : null;
+  const previousThemes = new Map((previousManifest?.themes ?? []).map((theme) => [theme.id, theme]));
+  const themeArtifacts = new Map();
+  const droppedScreenshotThemes = [];
+
+  await mkdir(stagedOutput, { recursive: true });
+  const manifestThemes = [];
+  for (const theme of sampleThemes) {
+    const stagedSampleDirectory = join(stagedOutput, theme.id);
+    const publishedSampleDirectory = join(absoluteOutput, theme.id);
+    await mkdir(stagedSampleDirectory, { recursive: true });
+    const promptExamples = await resolvePromptExamples(theme, publishedSampleDirectory);
+    const html = sampleHtml(theme, publishedSampleDirectory, promptExamples);
+    const sourceHash = await themeSampleSourceHash(theme, html, promptExamples);
+    const stagedHtml = mirrorAssets
+      ? await mirrorThemeAssets(theme, publishedSampleDirectory, stagedSampleDirectory, promptExamples, html)
+      : html;
+    await writeFile(join(stagedSampleDirectory, "index.html"), stagedHtml);
+
+    const previousTheme = previousThemes.get(theme.id);
+    const preservedScreenshots = [];
+    if (previousTheme?.screenshotSourceHash === sourceHash && Array.isArray(previousTheme.screenshots)) {
+      for (const name of THEME_SAMPLE_PAGE_NAMES) {
+        const filename = `${name}.png`;
+        if (
+          previousTheme.screenshots.includes(filename)
+          && await preserveScreenshot(join(publishedSampleDirectory, filename), join(stagedSampleDirectory, filename))
+        ) {
+          preservedScreenshots.push(filename);
+        }
+      }
+    }
+    const previousScreenshotCount = Array.isArray(previousTheme?.screenshots) ? previousTheme.screenshots.length : 0;
+    if (previousScreenshotCount > preservedScreenshots.length) {
+      droppedScreenshotThemes.push({
+        id: theme.id,
+        previousCount: previousScreenshotCount,
+        preservedCount: preservedScreenshots.length
+      });
+    }
+    const manifestTheme = {
+      id: theme.id,
+      name: theme.name,
+      sampleIndex: theme.sampleIndex,
+      pageCount: THEME_SAMPLE_PAGE_NAMES.length,
+      pages: [...THEME_SAMPLE_PAGE_NAMES],
+      originalPairing: theme.inspiration.originalPairing,
+      bundledPairing: theme.inspiration.bundledPairing,
+      substitutions: theme.inspiration.substitutions,
+      colors: themeColors(theme),
+      imagePrompt: theme.imagePrompt,
+      imagePromptStatus: theme.imagePromptStatus,
+      promptExamples,
+      screenshots: preservedScreenshots,
+      screenshotSourceHash: preservedScreenshots.length ? sourceHash : null
+    };
+    manifestThemes.push(manifestTheme);
+    themeArtifacts.set(theme.id, { html, sourceHash, manifestTheme });
+  }
+  await writeThemeSampleMetadata(stagedOutput, manifestThemes);
+  return {
+    outputTarget,
+    stagedOutput,
+    sampleThemes,
+    manifestThemes,
+    themeArtifacts,
+    droppedScreenshotThemes
+  };
+}
+
+export async function cleanupThemeSampleStage(stageContainer) {
+  try {
+    await rm(stageContainer, { recursive: true, force: true });
+  } catch (error) {
+    process.emitWarning(`Theme gallery cleanup could not remove ${stageContainer}: ${error.message}`, {
+      code: "THEME_GALLERY_CLEANUP_FAILED"
+    });
+  }
+}
+
+export async function buildThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPLE_OUTPUT_DIRECTORY } = {}) {
+  const absoluteOutput = await assertThemeSampleOutputDirectory(outputDirectory);
+  const outputParent = dirname(absoluteOutput);
   await mkdir(outputParent, { recursive: true });
   const stageContainer = await mkdtemp(join(outputParent, ".theme-gallery-stage-"));
   const stageRoot = join(stageContainer, "next");
-  const stagedOutput = join(stageRoot, outputTarget);
-  const sampleThemes = editorialThemes.map((theme, index) => ({ ...theme, sampleIndex: index + 1 }));
+  let staged;
   try {
-    await mkdir(stagedOutput, { recursive: true });
-    const manifestThemes = [];
-    for (const theme of sampleThemes) {
-      const stagedSampleDirectory = join(stagedOutput, theme.id);
-      const publishedSampleDirectory = join(absoluteOutput, theme.id);
-      await mkdir(stagedSampleDirectory, { recursive: true });
-      const promptExamples = await resolvePromptExamples(theme, publishedSampleDirectory);
-      await writeFile(join(stagedSampleDirectory, "index.html"), sampleHtml(theme, publishedSampleDirectory, promptExamples));
-      await Promise.all(THEME_SAMPLE_PAGE_NAMES.map((name) => preserveScreenshot(
-        join(publishedSampleDirectory, `${name}.png`),
-        join(stagedSampleDirectory, `${name}.png`)
-      )));
-      manifestThemes.push({
-        id: theme.id,
-        name: theme.name,
-        sampleIndex: theme.sampleIndex,
-        pageCount: THEME_SAMPLE_PAGE_NAMES.length,
-        pages: [...THEME_SAMPLE_PAGE_NAMES],
-        originalPairing: theme.inspiration.originalPairing,
-        bundledPairing: theme.inspiration.bundledPairing,
-        substitutions: theme.inspiration.substitutions,
-        colors: themeColors(theme),
-        imagePrompt: theme.imagePrompt,
-        imagePromptStatus: theme.imagePromptStatus,
-        promptExamples,
-        screenshots: THEME_SAMPLE_PAGE_NAMES.map((name) => `${name}.png`)
-      });
+    staged = await stageThemeSamples({ outputDirectory: absoluteOutput, stageRoot });
+    publishGeneratedTargets({ outputDir: outputParent, stageRoot, targets: [staged.outputTarget] });
+    if (staged.droppedScreenshotThemes.length) {
+      const themeIds = staged.droppedScreenshotThemes.map(({ id }) => id).join(", ");
+      process.emitWarning(
+        `Theme gallery screenshots were dropped for ${themeIds} because their rendered inputs changed or screenshots were missing. Run npm run render:theme-samples to refresh them.`,
+        { code: "THEME_GALLERY_SCREENSHOTS_STALE" }
+      );
     }
-
-    await writeFile(join(stagedOutput, "index.html"), galleryHtml(sampleThemes));
-    await writeFile(join(stagedOutput, "manifest.json"), `${JSON.stringify({
-      schemaVersion: 1,
-      article: {
-        url: PAIRING_ARTICLE_CREDIT.url,
-        writer: PAIRING_ARTICLE_CREDIT.writer,
-        curator: PAIRING_ARTICLE_CREDIT.curator
-      },
-      report,
-      themes: manifestThemes
-    }, null, 2)}\n`);
-    publishGeneratedTargets({ outputDir: outputParent, stageRoot, targets: [outputTarget] });
   } finally {
-    try {
-      await rm(stageContainer, { recursive: true, force: true });
-    } catch (error) {
-      process.emitWarning(`Theme gallery cleanup could not remove ${stageContainer}: ${error.message}`, {
-        code: "THEME_GALLERY_CLEANUP_FAILED"
-      });
-    }
+    await cleanupThemeSampleStage(stageContainer);
   }
 
   return {
     outputDirectory: absoluteOutput,
-    themeCount: sampleThemes.length,
-    pageCount: sampleThemes.length * THEME_SAMPLE_PAGE_NAMES.length
+    themeCount: staged.sampleThemes.length,
+    pageCount: staged.sampleThemes.length * THEME_SAMPLE_PAGE_NAMES.length,
+    droppedScreenshotThemes: staged.droppedScreenshotThemes
   };
 }
 

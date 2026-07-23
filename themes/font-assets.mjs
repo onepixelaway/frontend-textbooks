@@ -19,7 +19,7 @@ import {
   normalizeFontWeight
 } from "../scripts/lib/font-contract.mjs";
 import { publishGeneratedTargets } from "../scripts/lib/generated-publication.mjs";
-import { getFontTheme, themeFontStack } from "./index.mjs";
+import { getFontTheme, hasBundledFonts, themeFontStack } from "./index.mjs";
 
 const themesDir = dirname(fileURLToPath(import.meta.url));
 export const FONT_OUTPUT_ROOT = "assets/fonts";
@@ -196,7 +196,12 @@ export function resolveBookFontTheme({ theme, fontTheme, fontOverrides, projectR
     throw new Error("fontTheme and fontOverrides require bundled fontMode");
   }
   if (fontTheme !== undefined) return getFontTheme(fontTheme);
-  if (fontOverrides === undefined) return theme;
+  if (fontOverrides === undefined) {
+    if (fontMode !== "system" && !hasBundledFonts(theme)) {
+      throw new Error(`Theme ${theme.id} has no bundled font pack; select fontTheme or set fontMode to "system"`);
+    }
+    return theme;
+  }
   return resolveCustomFontTheme(fontOverrides, { projectRoot, outputDir });
 }
 

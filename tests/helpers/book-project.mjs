@@ -1,7 +1,7 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { getTheme } from "../../themes/index.mjs";
+import { getTheme, hasBundledFonts } from "../../themes/index.mjs";
 import { createCoverGenerationReceipt, createCoverImageRequest } from "../../scripts/lib/cover-image-request.mjs";
 import { sha256 } from "../../scripts/lib/content-hash.mjs";
 import { parseManuscript } from "../../scripts/lib/manuscript.mjs";
@@ -20,12 +20,19 @@ export async function writeBookProject(root, {
   const requestedOutputDir = isAbsolute(configuredOutputDir) ? configuredOutputDir : resolve(root, configuredOutputDir);
   await mkdir(join(requestedOutputDir, "assets"), { recursive: true });
   const outputDir = await realpath(requestedOutputDir);
+  const style = configOverrides.style ?? "technical";
+  const inferredFontMode = (
+    configOverrides.fontTheme !== undefined
+    || configOverrides.fontOverrides !== undefined
+    || hasBundledFonts(getTheme(style))
+  ) ? "bundled" : "system";
   const config = {
     title: "Fixture Book",
     author: "Test Author",
     outputDir: configuredOutputDir,
     coverImage: "assets/cover.png",
-    style: "technical",
+    style,
+    fontMode: Object.hasOwn(configOverrides, "fontMode") ? configOverrides.fontMode : inferredFontMode,
     selectedCoverRoute: "photo",
     bodyColumns: "text-single",
     chapterOpeners: false,

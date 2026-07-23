@@ -76,8 +76,22 @@ function assertFeaturePageContract(feature, index) {
   }
 }
 
-function assertSubjectiveAestheticCriteria(criteria) {
-  const measurableConfiguration = /\b(?:(?:one|single|two|three|[123])[- ]column|(?:photo|minimal)[ -]cover(?: route)?|(?:colbalt|cobalt|default|executive|alumni|field-guide|scholarly|technical|literary)[ -]theme)\b/iu;
+function regexThemeName(name) {
+  return name
+    .split("-")
+    .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+    .join("[- ]");
+}
+
+function assertSubjectiveAestheticCriteria(criteria, registeredThemes) {
+  const registeredThemePattern = [...new Set(registeredThemes)]
+    .toSorted((first, second) => second.length - first.length)
+    .map(regexThemeName)
+    .join("|");
+  const measurableConfiguration = new RegExp(
+    `\\b(?:(?:one|single|two|three|[123])[- ]column|(?:photo|minimal)[ -]cover(?: route)?|(?:${registeredThemePattern})[ -]theme)\\b`,
+    "iu"
+  );
   const invalid = criteria.filter((criterion) => measurableConfiguration.test(criterion));
   if (invalid.length) {
     throw new Error(`book-plan aestheticReview.criteria must contain subjective review criteria, not measurable configuration already represented by structured plan fields: ${invalid.join(" | ")}`);
@@ -121,7 +135,7 @@ export function assertPlanMatchesManuscript(plan, parsed, registeredThemes) {
   assertMeaningfulCoverDecision(plan.visuals.cover);
   plan.visuals.diagrams.forEach(assertDiagramContract);
   plan.visuals.featurePages.forEach(assertFeaturePageContract);
-  assertSubjectiveAestheticCriteria(plan.aestheticReview.criteria);
+  assertSubjectiveAestheticCriteria(plan.aestheticReview.criteria, registeredThemes);
   const diagramGrounding = new Set(plan.visuals.diagrams.flatMap((entry) => entry.sourceBlockIds));
   const unmaterialized = plan.classifications
     .filter((entry) => entry.treatment === "diagram" && !diagramGrounding.has(entry.sourceBlockId))

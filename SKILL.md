@@ -31,7 +31,7 @@ The model owns judgment: audience and genre, user-facing color and typography re
 - Make the result feel like a book, not a printed article or slide deck. Include appropriate front matter, page hierarchy, captions, running furniture, diagrams, and visual rhythm.
 - Keep production language out of reader-facing pages. Do not mention HTML, PDF export, Codex, AI, the skill, or a supplied manuscript inside the book unless requested.
 - Use distinct cover and part-divider assets. Never reuse cover art as an interior plate. Do not fabricate visual evidence.
-- Use bundled font files by default so HTML and PDF rendering stay deterministic and offline. `fontTheme` may select another registered typography pack independently of the color theme; `fontOverrides` declares a config-relative custom bundle with its license. Set `fontMode: "system"` only for intentional system-font fallbacks; legacy `remote` configs normalize to bundled fonts.
+- Use bundled font files by default so HTML and PDF rendering stay deterministic and offline. `fontTheme` may select another registered typography pack independently of the color theme; `fontOverrides` declares a config-relative custom bundle with its license. A palette-only legacy style must choose one of those routes or set `fontMode: "system"` explicitly; bundled mode never silently falls back to machine fonts. Legacy `remote` configs normalize to bundled fonts, and their existing `allow-remote-fonts` plan exception remains accepted as a compatibility no-op.
 
 ## Default Workflow
 

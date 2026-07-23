@@ -197,11 +197,17 @@ export function publishGeneratedTargets({ outputDir, stageRoot, targets, operati
     const rollbackErrors = rollbackPublication(states, createdParents, operations);
     preserveBackup = rollbackErrors.length > 0;
     if (rollbackErrors.length) {
-      throw new AggregateError(
+      const affectedTargets = states
+        .filter(({ backupMoved, published }) => backupMoved || published)
+        .map(({ target }) => target);
+      const aggregateError = new AggregateError(
         [primaryError, ...rollbackErrors],
-        `Generated output publication failed and rollback was incomplete: ${primaryError.message}`,
+        `Generated output publication failed and rollback was incomplete; previous output is preserved at ${backupRoot}: ${primaryError.message}`,
         { cause: primaryError }
       );
+      aggregateError.backupRoot = backupRoot;
+      aggregateError.targets = affectedTargets;
+      throw aggregateError;
     }
     throw primaryError;
   } finally {

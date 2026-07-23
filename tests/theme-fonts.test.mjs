@@ -346,6 +346,32 @@ test("system font mode skips theme font installation", async () => {
   assert.ok(!manifest.files.some((path) => path.startsWith("assets/fonts/")));
 });
 
+test("visual themes without font packs require an explicit font route", async () => {
+  assert.throws(
+    () => resolveBookFontTheme({ theme: getTheme("technical") }),
+    /technical.*no bundled font pack.*fontTheme.*fontMode.*system/u
+  );
+  assert.equal(
+    resolveBookFontTheme({ theme: getTheme("technical"), fontMode: "system" }).id,
+    "technical"
+  );
+
+  const rejectedRoot = await temporaryDirectory("frontend-textbooks-missing-theme-fonts-");
+  const rejected = await writeBookProject(rejectedRoot, {
+    configOverrides: { style: "technical", fontMode: undefined }
+  });
+  await assert.rejects(
+    execFileAsync(process.execPath, [builder.pathname, rejected.configPath, rejected.manuscriptPath, rejected.planPath]),
+    /technical.*no bundled font pack.*fontTheme.*fontMode.*system/u
+  );
+
+  const systemRoot = await temporaryDirectory("frontend-textbooks-explicit-system-fonts-");
+  const system = await writeBookProject(systemRoot, {
+    configOverrides: { style: "technical", fontMode: "system" }
+  });
+  await execFileAsync(process.execPath, [builder.pathname, system.configPath, system.manuscriptPath, system.planPath]);
+});
+
 test("font publication returns portable asset paths", async () => {
   const root = await temporaryDirectory("frontend-textbooks-font-install-");
   const prepared = prepareThemeFonts(getTheme("alumni"));

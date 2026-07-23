@@ -13,6 +13,7 @@ const MAX_METADATA_BYTES = 1024 * 1024;
 const MAX_LICENSE_BYTES = 1024 * 1024;
 const MAX_FONT_BYTES = 12 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 48 * 1024 * 1024;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 30_000;
 const LICENSE_FILES = new Map([
   ["OFL", "OFL.txt"],
   ["APACHE2", "LICENSE.txt"],
@@ -229,15 +230,27 @@ async function responseBytes(response, label, maximumBytes) {
   return Buffer.concat(chunks, size);
 }
 
-async function fetchAsset(fetchImpl, url, label, maximumBytes, budget) {
-  const response = await fetchImpl(url, {
-    redirect: "error",
-    headers: { accept: "application/octet-stream" }
-  });
-  const bytes = await responseBytes(response, label, maximumBytes);
-  budget.bytes += bytes.length;
-  if (budget.bytes > MAX_TOTAL_BYTES) throw new Error(`Google Fonts acquisition exceeds the ${MAX_TOTAL_BYTES}-byte total limit`);
-  return bytes;
+async function fetchAsset(fetchImpl, url, label, maximumBytes, budget, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(url, {
+      redirect: "error",
+      headers: { accept: "application/octet-stream" },
+      signal: controller.signal
+    });
+    const bytes = await responseBytes(response, label, maximumBytes);
+    budget.bytes += bytes.length;
+    if (budget.bytes > MAX_TOTAL_BYTES) throw new Error(`Google Fonts acquisition exceeds the ${MAX_TOTAL_BYTES}-byte total limit`);
+    return bytes;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label} download timed out after ${timeoutMs}ms`, { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function pathStat(path) {
@@ -273,14 +286,14 @@ function prefixedFilename(repositoryPathValue, filename) {
   return `${basename(repositoryPathValue)}-${safeFileSegment(filename, "Google Fonts filename")}`;
 }
 
-async function downloadBundle(request, fetchImpl) {
+async function downloadBundle(request, fetchImpl, timeoutMs) {
   const budget = { bytes: 0 };
   const assets = [];
   const faces = [];
   const licenses = [];
   for (const familyRequest of request.families) {
     const root = `${GOOGLE_FONTS_RAW_ROOT}/${request.ref}/${familyRequest.repositoryPath}`;
-    const metadataBytes = await fetchAsset(fetchImpl, `${root}/METADATA.pb`, `${familyRequest.family} metadata`, MAX_METADATA_BYTES, budget);
+    const metadataBytes = await fetchAsset(fetchImpl, `${root}/METADATA.pb`, `${familyRequest.family} metadata`, MAX_METADATA_BYTES, budget, timeoutMs);
     const metadata = parseGoogleFontsMetadata(metadataBytes.toString("utf8"));
     if (metadata.family !== familyRequest.family) {
       throw new Error(`Requested family ${familyRequest.family} does not match google/fonts metadata family ${metadata.family}`);
@@ -289,12 +302,12 @@ async function downloadBundle(request, fetchImpl) {
 
     for (const face of metadata.faces) {
       const outputFile = prefixedFilename(familyRequest.repositoryPath, face.file);
-      const bytes = await fetchAsset(fetchImpl, `${root}/${face.file}`, `${familyRequest.family} font ${face.file}`, MAX_FONT_BYTES, budget);
+      const bytes = await fetchAsset(fetchImpl, `${root}/${face.file}`, `${familyRequest.family} font ${face.file}`, MAX_FONT_BYTES, budget, timeoutMs);
       assets.push({ file: outputFile, bytes, source: `${familyRequest.repositoryPath}/${face.file}` });
       faces.push({ family: face.family, weight: face.weight, style: face.style, file: outputFile });
     }
     const licenseOutput = prefixedFilename(familyRequest.repositoryPath, metadata.licenseFile);
-    const licenseBytes = await fetchAsset(fetchImpl, `${root}/${metadata.licenseFile}`, `${familyRequest.family} license`, MAX_LICENSE_BYTES, budget);
+    const licenseBytes = await fetchAsset(fetchImpl, `${root}/${metadata.licenseFile}`, `${familyRequest.family} license`, MAX_LICENSE_BYTES, budget, timeoutMs);
     assets.push({ file: licenseOutput, bytes: licenseBytes, source: `${familyRequest.repositoryPath}/${metadata.licenseFile}` });
     licenses.push({ family: familyRequest.family, file: licenseOutput });
   }
@@ -309,8 +322,16 @@ async function downloadBundle(request, fetchImpl) {
   };
 }
 
-export async function acquireGoogleFontBundle({ projectRoot, request: input, fetchImpl = globalThis.fetch }) {
+export async function acquireGoogleFontBundle({
+  projectRoot,
+  request: input,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS
+}) {
   if (typeof fetchImpl !== "function") throw new Error("Google Fonts acquisition requires fetch support");
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    throw new Error("Google Fonts acquisition timeoutMs must be a positive integer");
+  }
   const request = validateGoogleFontsRequest(input);
   const canonicalProjectRoot = await realpath(resolve(projectRoot));
   const destination = resolve(canonicalProjectRoot, ...request.sourceDirectory.split("/"));
@@ -321,7 +342,7 @@ export async function acquireGoogleFontBundle({ projectRoot, request: input, fet
   const parent = dirname(destination);
   await ensureLocalDirectory(canonicalProjectRoot, parent);
 
-  const bundle = await downloadBundle(request, fetchImpl);
+  const bundle = await downloadBundle(request, fetchImpl, timeoutMs);
   const stage = await mkdtemp(resolve(parent, ".google-fonts-stage-"));
   try {
     for (const asset of bundle.assets) await writeFile(resolve(stage, asset.file), asset.bytes, { flag: "wx" });

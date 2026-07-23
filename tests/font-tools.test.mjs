@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -195,6 +195,33 @@ test("Google Fonts acquisition rejects mutable refs and unbounded family request
       { family: "Four", repositoryPath: "ofl/four" }
     ]
   }), /at most 3/u);
+});
+
+test("Google Fonts acquisition times out stalled downloads before creating the destination", async () => {
+  const projectRoot = await temporaryDirectory("frontend-textbooks-google-font-timeout-");
+  const request = {
+    schemaVersion: 1,
+    ref: pinnedRef,
+    sourceDirectory: "book-fonts/timeout",
+    roles: {
+      display: { family: "Example Sans", fallback: "sans-serif" },
+      body: { family: "Example Sans", fallback: "sans-serif" },
+      ui: { family: "Example Sans", fallback: "sans-serif" }
+    },
+    families: [{ family: "Example Sans", repositoryPath: "ofl/examplesans" }]
+  };
+  const stalledFetch = async (_url, { signal }) => {
+    if (!signal) throw new Error("missing timeout signal");
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  };
+
+  await assert.rejects(
+    acquireGoogleFontBundle({ projectRoot, request, fetchImpl: stalledFetch, timeoutMs: 10 }),
+    /Example Sans metadata download timed out after 10ms/u
+  );
+  await assert.rejects(access(join(projectRoot, request.sourceDirectory)), /ENOENT/u);
 });
 
 test("Google Fonts acquisition command exposes its versioned request shape without network access", async () => {

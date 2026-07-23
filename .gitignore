@@ -4,3 +4,9 @@ node_modules/
 .vercel/
 *.log
 .verification/
+**/.book-build-backup-*/
+**/.book-build-stage-*/
+**/.google-fonts-stage-*/
+**/.theme-fonts-stage-*/
+**/.theme-gallery-stage-*/
+**/.theme-gallery-render-stage-*/

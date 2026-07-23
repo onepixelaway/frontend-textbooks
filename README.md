@@ -136,7 +136,7 @@ Pipeline stdout is always one compact JSON object, including failures. Full evid
 
 ## Included Styles
 
-Interactive runs recommend three manuscript-grounded visual systems and wait for the user's color and typography choice. `book.json.style` plus `themeOverrides` control color and image-prompt behavior; `fontTheme` may independently select another registered bundled typography pack. A requested Google Fonts family that is not registered can be downloaded with its OFL license into the book workspace and declared through `fontOverrides`; the build still renders offline. For direct or legacy configs without a style, the runtime fallback is `colbalt`, a cobalt editorial system defined in `themes/colbalt`:
+Interactive runs recommend three manuscript-grounded visual systems and wait for the user's color and typography choice. `book.json.style` plus `themeOverrides` control color and image-prompt behavior; `fontTheme` may independently select another registered bundled typography pack. A requested Google Fonts family that is not registered can be downloaded with its OFL license into the book workspace and declared through `fontOverrides`; the build still renders offline. Palette-only legacy styles must pair with `fontTheme`/`fontOverrides` or explicitly use `fontMode: "system"`—bundled mode never silently falls back to machine fonts. For direct or legacy configs without a style, the runtime fallback is `colbalt`, a cobalt editorial system defined in `themes/colbalt`:
 
 - Poppins-compatible local fallbacks for headings and labels by default
 - Halant-compatible local serif fallbacks for body copy by default

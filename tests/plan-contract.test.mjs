@@ -112,4 +112,13 @@ test("aesthetic criteria cannot restate measurable layout configuration", () => 
       /subjective review criteria.*structured plan fields/i
     );
   }
+  for (const theme of STYLE_NAMES) {
+    const invalid = structuredClone(plan);
+    invalid.aestheticReview.criteria = [`honor the ${theme} theme`];
+    assert.throws(
+      () => assertPlanMatchesManuscript(invalid, parsed, STYLE_NAMES),
+      /subjective review criteria.*structured plan fields/i,
+      `${theme} must remain a structured theme choice`
+    );
+  }
 });

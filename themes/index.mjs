@@ -87,7 +87,7 @@ for (const theme of localThemes) {
 }
 
 export const STYLE_NAMES = Object.keys(THEMES);
-function hasBundledFonts(theme) {
+export function hasBundledFonts(theme) {
   return Boolean(theme?.fonts?.faces?.length && theme?.fonts?.licenses?.length);
 }
 

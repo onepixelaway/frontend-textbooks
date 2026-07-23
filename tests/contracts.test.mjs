@@ -116,6 +116,16 @@ test("model-authored contracts accept structured reasoning and reject prose-shap
   assert.equal(validateContract("book-plan", { ...plan, commentary: "free-form" }).valid, false);
 });
 
+test("book plans accept the legacy remote-font policy exception as a compatibility no-op", () => {
+  const plan = bookPlan({ manuscriptHash: "0".repeat(64), sourceBlockId: "source-1", theme: "technical" });
+  plan.exceptions.push({
+    rule: "allow-remote-fonts",
+    scope: "book",
+    rationale: "This plan predates bundled font normalization."
+  });
+  assert.equal(validateContract("book-plan", plan).valid, true);
+});
+
 test("book contracts support only photo and minimal cover routes", () => {
   for (const route of ["photo", "minimal"]) {
     assert.equal(validateContract("book-config", { title: "Book", author: "Author", coverImage: "assets/cover.png", selectedCoverRoute: route }).valid, true);
