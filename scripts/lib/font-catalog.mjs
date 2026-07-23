@@ -16,6 +16,16 @@ function fontRole(theme, role) {
   };
 }
 
+function fontRoles(theme) {
+  const roles = {
+    display: fontRole(theme, "display"),
+    body: fontRole(theme, "body"),
+    ui: fontRole(theme, "ui")
+  };
+  if (theme.fonts.accent) roles.accent = fontRole(theme, "accent");
+  return roles;
+}
+
 function compareText(left, right) {
   return String(left).localeCompare(String(right), "en");
 }
@@ -27,11 +37,7 @@ export function createRegisteredFontCatalog() {
       id: theme.id,
       name: theme.name ?? theme.id,
       aliases: [...(theme.aliases ?? [])].sort(compareText),
-      roles: {
-        display: fontRole(theme, "display"),
-        body: fontRole(theme, "body"),
-        ui: fontRole(theme, "ui")
-      },
+      roles: fontRoles(theme),
       faces: theme.fonts.faces
         .map((face) => ({
           family: face.family,

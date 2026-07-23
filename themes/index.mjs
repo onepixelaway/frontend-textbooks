@@ -1,9 +1,11 @@
 import alumniTheme from "./alumni/index.mjs";
 import colbaltTheme from "./colbalt/index.mjs";
+import dribbblePairingThemes from "./dribbble-pairings.mjs";
 
 const localThemes = [
   colbaltTheme,
   alumniTheme,
+  ...dribbblePairingThemes,
   {
     id: "field-guide",
     colors: {
@@ -71,7 +73,7 @@ const localThemes = [
 ];
 
 for (const theme of localThemes) {
-  if (!theme.imagePrompt) theme.imagePrompt = colbaltTheme.imagePrompt;
+  if (!Object.hasOwn(theme, "imagePrompt")) theme.imagePrompt = colbaltTheme.imagePrompt;
 }
 
 export const DEFAULT_THEME_NAME = colbaltTheme.id;
@@ -119,5 +121,6 @@ export function themeFontStack(theme, name) {
   if (name === "display") return fonts.display?.stack ?? fonts.header?.stack ?? theme.display;
   if (name === "body") return fonts.body?.stack ?? theme.body;
   if (name === "ui") return fonts.ui?.stack ?? fonts.header?.stack ?? theme.ui;
+  if (name === "accent") return fonts.accent?.stack ?? fonts.ui?.stack ?? fonts.header?.stack ?? theme.ui;
   return "";
 }

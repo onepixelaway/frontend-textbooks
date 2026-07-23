@@ -66,7 +66,15 @@ function response(body, { status = 200, headers = {} } = {}) {
 test("font catalog reports registered packs, role metadata, and aliases as JSON", async () => {
   const catalog = createRegisteredFontCatalog();
   assert.equal(catalog.schemaVersion, 1);
-  assert.deepEqual(catalog.packs.map(({ id }) => id), ["alumni", "colbalt"]);
+  assert.deepEqual(catalog.packs.map(({ id }) => id), [
+    "alumni",
+    "colbalt",
+    "mazius-libre",
+    "millimetre-mondwest",
+    "monument-space",
+    "regina-poppins",
+    "sporting-agrandir"
+  ]);
 
   const colbalt = catalog.packs.find(({ id }) => id === "colbalt");
   assert.deepEqual(colbalt.aliases, ["cobalt", "default", "executive"]);
@@ -75,6 +83,10 @@ test("font catalog reports registered packs, role metadata, and aliases as JSON"
   assert.deepEqual(colbalt.roles.ui.weights, [600, 700, 800]);
   assert.equal(colbalt.faces.length, 6);
   assert.equal(colbalt.licenses.length, 2);
+
+  const brutalElegance = catalog.packs.find(({ id }) => id === "mazius-libre");
+  assert.equal(brutalElegance.roles.display.family, "Mazius Display");
+  assert.equal(brutalElegance.roles.accent.family, "Mazius Display");
 
   const result = await execFileAsync(process.execPath, [catalogCommand.pathname]);
   assert.deepEqual(JSON.parse(result.stdout), catalog);

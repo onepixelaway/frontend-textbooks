@@ -434,6 +434,7 @@ function themeCss() {
   --font-display: ${themeFontStack(activeFontTheme, "display")};
   --font-body: ${themeFontStack(activeFontTheme, "body")};
   --font-ui: ${themeFontStack(activeFontTheme, "ui")};
+  --font-accent: ${themeFontStack(activeFontTheme, "accent")};
   --page-margin-top: 0.72in;
   --page-margin-bottom: 0.72in;
   --page-margin-inner: 0.78in;
@@ -456,7 +457,7 @@ body { font-size: 10.7pt; }
 .cover-kicker { color: #fff; }
 .cover-kicker::after { content: ""; display: block; width: 0.62in; height: 0.06in; margin: 0.14in 0 0.18in; background: var(--accent); }
 .cover-title { max-width: 6.8in; margin: 0; font-size: 44pt; line-height: 0.94; color: #fff; text-shadow: none; }
-.cover-subtitle { max-width: 6.3in; margin: 0.18in 0 0; font-family: var(--font-ui); font-size: 12pt; font-weight: 700; line-height: 1.35; color: #fff; }
+.cover-subtitle { max-width: 6.3in; margin: 0.18in 0 0; font-family: var(--font-accent, var(--font-ui)); font-size: 12pt; font-weight: 700; line-height: 1.35; color: #fff; }
 .cover-author { margin-top: 0.3in; font-family: var(--font-ui); font-size: 8pt; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; color: #fff; }
 .title-grid { display: grid; grid-template-rows: auto 1fr auto; }
 .title-grid h1 { align-self: end; max-width: 6in; font-size: 56pt; }
@@ -546,7 +547,7 @@ body { font-size: 10.7pt; }
 .diagram-relationships[hidden] { display: none; }
 .diagram-takeaway { margin-top: 0.12in; padding-top: 0.1in; border-top: 2px solid var(--accent); font-weight: 700; color: var(--heading-ink); }
 .planned-table, .planned-checklist { padding: 0.12in 0.16in; border-top: 2px solid var(--accent); border-bottom: 1px solid var(--rule); break-inside: avoid; }
-.planned-quote { padding-left: 0.2in; border-left: 0.04in solid var(--accent); font-family: var(--font-display); font-size: 12pt; font-style: italic; }
+.planned-quote { padding-left: 0.2in; border-left: 0.04in solid var(--accent); font-family: var(--font-accent, var(--font-display)); font-size: 12pt; font-style: italic; }
 .option-cover { position: relative; overflow: hidden; background: var(--cover-band); }
 .cover-art-frame { position: absolute; inset: 0 0 auto; height: var(--cover-art-height); margin: 0; overflow: hidden; background: var(--soft-accent); }
 .cover-art { display: block; width: 100%; height: 100%; object-fit: cover; object-position: calc(var(--cover-focal-x) * 1%) calc(var(--cover-focal-y) * 1%); }

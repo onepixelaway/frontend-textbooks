@@ -31,7 +31,7 @@ const FONT_FORMATS = new Map([
 ]);
 const CSS_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
 const SUPPORTED_LICENSE_TEXTS = [
-  /SIL OPEN FONT LICENSE\s+Version 1\.1/iu,
+  /SIL OPEN FONT LICENSE\s*,?\s*Version 1\.1/iu,
   /Apache License\s*,?\s*Version 2\.0/iu,
   /UBUNTU FONT LICEN[CS]E\s+Version 1\.0/iu
 ];
@@ -313,7 +313,8 @@ export function createThemeCacheIdentity({ theme, fontTheme, fontMode }) {
         ? {
             display: themeFontStack(fontTheme, "display"),
             body: themeFontStack(fontTheme, "body"),
-            ui: themeFontStack(fontTheme, "ui")
+            ui: themeFontStack(fontTheme, "ui"),
+            accent: themeFontStack(fontTheme, "accent")
           }
         : fontTheme.fonts
     },

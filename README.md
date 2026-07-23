@@ -12,7 +12,7 @@ The skill is built for textbook, manual, field-guide, executive briefing, and co
 
 - **Print-Ready PDF Output** - Exports US Letter PDFs with page-safe CSS, printed backgrounds, and fixed-format designed pages.
 - **HTML First** - Produces a browser-readable HTML book before exporting the PDF, so the artifact stays inspectable and editable.
-- **Bundled Theme Typography** - Ships each font-bearing theme with its licensed Google Fonts files, copies the active faces and licenses into the book, and renders without font-network access.
+- **Bundled Theme Typography** - Ships each font-bearing theme with redistributable licensed font files, copies the active faces and licenses into the book, and renders without font-network access.
 - **Enforced Manuscript Preservation** - Tracks stable source blocks and fails verification below 90% coverage instead of merely estimating preservation.
 - **Original Cover Artwork on Every Run** - Requires a unique manuscript-grounded local bitmap, binds it to the active theme prompt and manuscript hash, and fails closed instead of falling back to a typographic cover.
 - **Designed Book Rhythm** - Supports covers, title pages, tables of contents, part dividers, two-column reading pages, manuscript-grounded framework, scorecard, and numbers exhibits, diagrams, and chapter closers.
@@ -34,6 +34,8 @@ These pages were rendered from an example PDF generated with the skill. The same
   <img src="examples/walking-in-canvas.png" width="220" alt="Example framework canvas page">
   <img src="examples/walking-in-checklist.png" width="220" alt="Example two-column textbook page with a checklist">
 </p>
+
+The repository also includes a [five-theme type-pairing gallery](examples/theme-gallery/index.html): three US Letter report pages per theme, all using the same fictional report so the typography and palette differences are easy to compare. Rebuild its HTML with `npm run build:theme-samples` or render all 15 PNG previews with `npm run render:theme-samples`.
 
 ## Why Codex Is Recommended
 
@@ -145,6 +147,18 @@ Interactive runs recommend three manuscript-grounded visual systems and wait for
 
 The scaffold also includes an `alumni` theme inspired by a warm single-ink editorial system: Bricolage Grotesque display type, Fraunces body copy, rust terracotta ink, and cream paper.
 
+Five additional themes adapt selected pairings from [“8 expressive free font combos for your next design”](https://dribbble.com/stories/2020/06/10/free-font-combinations) into executable, offline packs:
+
+| Theme ID | Original pairing | Bundled pairing |
+| --- | --- | --- |
+| `mazius-libre` | Mazius Display + Libre Baskerville | Mazius Display + Libre Baskerville |
+| `regina-poppins` | Regina Black + Poppins | Shrikhand + Poppins |
+| `monument-space` | Monument Extended + Space Mono | Archivo Black + Space Mono |
+| `sporting-agrandir` | Sporting Grotesque + Agrandir | Sporting Grotesque + Barlow Semi Condensed |
+| `millimetre-mondwest` | Millimetre + Mondwest | Millimetre + Departure Mono |
+
+The replacements preserve the original visual direction without redistributing personal-use, trial, or non-commercial files. Every source, immutable revision, license, and substitution rationale is recorded in [`themes/FONT_SOURCES.md`](themes/FONT_SOURCES.md). Their `imagePrompt` values are deliberately blank with a `pending-user-supplied` status until the corresponding prompts are provided; the cover generator fails clearly instead of silently inheriting unrelated artwork direction.
+
 For example, `{"style":"colbalt","fontTheme":"alumni"}` keeps the cobalt palette and cover-art language while using Alumni's Bricolage Grotesque/Fraunces typography. Custom `fontOverrides` use the same display/body/UI roles and must declare every local face and license.
 
 Agents can inspect the executable packs with `node scripts/font-catalog.mjs`. For an unregistered Google Fonts request, `node scripts/acquire-google-fonts.mjs --example` prints the pinned request format; the completed command downloads faces and licenses from the official `google/fonts` repository and returns a ready-to-use `fontOverrides` object.
@@ -225,6 +239,8 @@ Plan v3 adds required `visuals.featurePages`. Designed nonfiction should provide
 ## Credits
 
 Inspired by [Zara Zhang's `frontend-slides`](https://github.com/zarazhangrui/frontend-slides), especially the skill-first packaging idea, HTML-first artifact workflow, installation structure, and README organization. Thank you, Zara.
+
+The expressive pairing themes and their specimen palettes are based on selected pairings from [Renee Fleck’s Dribbble article “8 expressive free font combos for your next design”](https://dribbble.com/stories/2020/06/10/free-font-combinations), with the pairings curated and visually demonstrated by Davide Baratta. Thank you, Renee and Davide.
 
 ## License
 

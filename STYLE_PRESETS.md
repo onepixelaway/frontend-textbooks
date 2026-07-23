@@ -21,6 +21,12 @@ Copy the command's `fontOverrides` object into `book.json`; do not also set `fon
 
 Avoid generic AI aesthetics: purple gradients, identical cards, centered everything, system-font blandness, and decoration that fights the prose.
 
+## Article Pairing Theme Packs
+
+Five offline theme packs adapt selected pairings from Renee Fleck and Davide Baratta’s [Dribbble pairing article](https://dribbble.com/stories/2020/06/10/free-font-combinations): `mazius-libre`, `regina-poppins`, `monument-space`, `sporting-agrandir`, and `millimetre-mondwest`. Each supplies a full semantic palette plus display, body, UI, and accent font roles. Use `{"fontTheme":"<id>"}` to apply its typography independently, or use the same ID as `style` after its pending canonical image prompt has been supplied. Restricted originals use documented redistributable substitutes; see [themes/FONT_SOURCES.md](themes/FONT_SOURCES.md).
+
+The generated comparison at `examples/theme-gallery/index.html` applies every pack to the same three-page report. Rebuild it with `npm run build:theme-samples`; render all 15 page previews with `npm run render:theme-samples`.
+
 ## Colbalt Editorial Theme
 
 The scaffold source of truth for this default is [themes/colbalt/index.mjs](themes/colbalt/index.mjs). Keep font stacks, color tokens, and the generated-image prompt synchronized there first; this section documents the design language for agents and manual builds.

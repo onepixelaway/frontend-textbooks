@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "article": {
+    "url": "https://dribbble.com/stories/2020/06/10/free-font-combinations",
+    "writer": "Renee Fleck",
+    "curator": "Davide Baratta"
+  },
+  "report": {
+    "title": "The Deliberate Life",
+    "subtitle": "A practical report on reclaiming time, attention, and agency",
+    "author": "Tareq Ismail"
+  },
+  "themes": [
+    {
+      "id": "mazius-libre",
+      "name": "Brutal Elegance — Mazius + Libre Baskerville",
+      "sampleIndex": 1,
+      "pageCount": 3,
+      "pages": [
+        "cover",
+        "control-audit",
+        "agency-plan"
+      ],
+      "originalPairing": [
+        "Mazius Display",
+        "Libre Baskerville"
+      ],
+      "bundledPairing": [
+        "Mazius Display",
+        "Libre Baskerville"
+      ],
+      "substitutions": [],
+      "colors": {
+        "browser": "#121212",
+        "page": "#232323",
+        "ink": "#F9F9F9",
+        "heading": "#F9F9F9",
+        "deck": "#D6D6D6",
+        "muted": "#A5A5A5",
+        "meta": "#E4FF5E",
+        "accent": "#E4FF5E",
+        "soft": "#303030",
+        "rule": "#5A5A5A",
+        "steel": "#0E0E0E",
+        "coverBand": "#0E0E0E",
+        "callout": "#2D2D2D"
+      },
+      "imagePrompt": null,
+      "imagePromptStatus": "pending-user-supplied",
+      "screenshots": [
+        "cover.png",
+        "control-audit.png",
+        "agency-plan.png"
+      ]
+    },
+    {
+      "id": "regina-poppins",
+      "name": "Funkadelic — Regina Black + Poppins",
+      "sampleIndex": 2,
+      "pageCount": 3,
+      "pages": [
+        "cover",
+        "control-audit",
+        "agency-plan"
+      ],
+      "originalPairing": [
+        "Regina Black",
+        "Poppins"
+      ],
+      "bundledPairing": [
+        "Shrikhand",
+        "Poppins"
+      ],
+      "substitutions": [
+        {
+          "original": "Regina Black",
+          "bundled": "Shrikhand",
+          "sourceUrl": "https://www.losttype.com/font/?name=regina",
+          "reason": "Regina Black is personal-use licensed and cannot be redistributed; Shrikhand preserves its bubbly retro display character under OFL-1.1."
+        }
+      ],
+      "colors": {
+        "browser": "#D5A83B",
+        "page": "#FFDB60",
+        "ink": "#3B2028",
+        "heading": "#F74735",
+        "deck": "#5D2A2B",
+        "muted": "#7F5037",
+        "meta": "#F74735",
+        "accent": "#F74735",
+        "soft": "#FFE793",
+        "rule": "#ECA64B",
+        "steel": "#3A2031",
+        "coverBand": "#F74735",
+        "callout": "#FFF1BC"
+      },
+      "imagePrompt": null,
+      "imagePromptStatus": "pending-user-supplied",
+      "screenshots": [
+        "cover.png",
+        "control-audit.png",
+        "agency-plan.png"
+      ]
+    },
+    {
+      "id": "monument-space",
+      "name": "Fighting Robots — Monument Extended + Space Mono",
+      "sampleIndex": 3,
+      "pageCount": 3,
+      "pages": [
+        "cover",
+        "control-audit",
+        "agency-plan"
+      ],
+      "originalPairing": [
+        "Monument Extended",
+        "Space Mono"
+      ],
+      "bundledPairing": [
+        "Archivo Black",
+        "Space Mono"
+      ],
+      "substitutions": [
+        {
+          "original": "Monument Extended",
+          "bundled": "Archivo Black",
+          "sourceUrl": "https://pangrampangram.com/products/monument-extended",
+          "reason": "Monument Extended is free-to-try and forbids public redistribution; Archivo Black supplies comparable architectural weight under OFL-1.1."
+        }
+      ],
+      "colors": {
+        "browser": "#D7D7CF",
+        "page": "#F4F4EA",
+        "ink": "#181A24",
+        "heading": "#FF213A",
+        "deck": "#34384B",
+        "muted": "#696D79",
+        "meta": "#FF213A",
+        "accent": "#FF213A",
+        "soft": "#FFE4E7",
+        "rule": "#F2B8BF",
+        "steel": "#11182E",
+        "coverBand": "#FF213A",
+        "callout": "#FFF0F1"
+      },
+      "imagePrompt": null,
+      "imagePromptStatus": "pending-user-supplied",
+      "screenshots": [
+        "cover.png",
+        "control-audit.png",
+        "agency-plan.png"
+      ]
+    },
+    {
+      "id": "sporting-agrandir",
+      "name": "Weird Yet Relaxed — Sporting Grotesque + Agrandir",
+      "sampleIndex": 4,
+      "pageCount": 3,
+      "pages": [
+        "cover",
+        "control-audit",
+        "agency-plan"
+      ],
+      "originalPairing": [
+        "Sporting Grotesque",
+        "Agrandir"
+      ],
+      "bundledPairing": [
+        "Sporting Grotesque",
+        "Barlow Semi Condensed"
+      ],
+      "substitutions": [
+        {
+          "original": "Agrandir",
+          "bundled": "Barlow Semi Condensed",
+          "sourceUrl": "https://pangrampangram.com/products/agrandir",
+          "reason": "Agrandir is free-to-try and cannot be publicly redistributed; Barlow Semi Condensed retains its narrow geometric rhythm under OFL-1.1."
+        }
+      ],
+      "colors": {
+        "browser": "#0000A8",
+        "page": "#0000FE",
+        "ink": "#FBFBEF",
+        "heading": "#FBFBEF",
+        "deck": "#D8D8FF",
+        "muted": "#B1B1E8",
+        "meta": "#C9FF68",
+        "accent": "#C9FF68",
+        "soft": "#1717D9",
+        "rule": "#7474FF",
+        "steel": "#000066",
+        "coverBand": "#000066",
+        "callout": "#0B0BC3"
+      },
+      "imagePrompt": null,
+      "imagePromptStatus": "pending-user-supplied",
+      "screenshots": [
+        "cover.png",
+        "control-audit.png",
+        "agency-plan.png"
+      ]
+    },
+    {
+      "id": "millimetre-mondwest",
+      "name": "Technical Specs — Millimetre + Mondwest",
+      "sampleIndex": 5,
+      "pageCount": 3,
+      "pages": [
+        "cover",
+        "control-audit",
+        "agency-plan"
+      ],
+      "originalPairing": [
+        "Millimetre",
+        "Mondwest"
+      ],
+      "bundledPairing": [
+        "Millimetre",
+        "Departure Mono"
+      ],
+      "substitutions": [
+        {
+          "original": "Mondwest",
+          "bundled": "Departure Mono",
+          "sourceUrl": "https://pangrampangram.com/products/bitmap-mondwest",
+          "reason": "Mondwest is free-to-try and cannot be publicly redistributed; Departure Mono provides a legible pixel-built counterpoint under OFL-1.1."
+        }
+      ],
+      "colors": {
+        "browser": "#888B7E",
+        "page": "#AEB1A0",
+        "ink": "#232323",
+        "heading": "#232323",
+        "deck": "#35362F",
+        "muted": "#5A5E52",
+        "meta": "#B95332",
+        "accent": "#D56F3D",
+        "soft": "#C4C6B8",
+        "rule": "#858879",
+        "steel": "#303428",
+        "coverBand": "#232323",
+        "callout": "#C9CBBE"
+      },
+      "imagePrompt": null,
+      "imagePromptStatus": "pending-user-supplied",
+      "screenshots": [
+        "cover.png",
+        "control-audit.png",
+        "agency-plan.png"
+      ]
+    }
+  ]
+}

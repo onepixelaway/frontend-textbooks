@@ -113,7 +113,8 @@ test("theme cache identity follows the rendered font mode", () => {
   assert.deepEqual(system.fontTheme.fonts, {
     display: theme.fonts.header.stack,
     body: theme.fonts.body.stack,
-    ui: theme.fonts.ui.stack
+    ui: theme.fonts.ui.stack,
+    accent: theme.fonts.ui.stack
   });
 });
 

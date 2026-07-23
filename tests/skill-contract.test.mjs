@@ -101,6 +101,10 @@ test("instructions, metadata, and schemas agree that original cover artwork is m
 test("every registered theme exposes one runtime cover prompt contract", async () => {
   const { THEMES } = await import("../themes/index.mjs");
   for (const [name, theme] of Object.entries(THEMES)) {
+    if (theme.imagePromptStatus === "pending-user-supplied") {
+      assert.equal(theme.imagePrompt, null, `${name} must leave the requested image prompt blank`);
+      continue;
+    }
     assert.ok(theme.imagePrompt?.template, `${name} is missing imagePrompt.template`);
     assert.ok(theme.imagePrompt.template.includes(theme.imagePrompt.subjectPlaceholder), `${name} prompt is missing its subject placeholder`);
     assert.ok(theme.imagePrompt.template.includes(theme.imagePrompt.palettePlaceholder), `${name} prompt is missing its palette placeholder`);

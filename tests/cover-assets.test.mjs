@@ -48,6 +48,20 @@ test("a generated cover request uses the active theme's canonical template", asy
   assert.match(request.requestHash, /^[a-f0-9]{64}$/);
 });
 
+test("a theme awaiting its user-supplied image prompt fails with an actionable error", async () => {
+  const paths = await fixture();
+  assert.throws(() => createCoverImageRequest({
+    config: { title: "A Book", author: "Author", style: "mazius-libre", coverImage: "assets/cover.png", selectedCoverRoute: "photo" },
+    plan: {
+      manuscriptHash: "d".repeat(64),
+      theme: { id: "mazius-libre" },
+      layout: { coverRoute: "photo" },
+      visuals: { cover: coverDecision() }
+    },
+    outputDir: paths.outputDir
+  }), /Theme mazius-libre has no canonical image-prompt template/u);
+});
+
 test("theme overrides replace the illustration palette and invalidate stale artwork requests", async () => {
   const paths = await fixture();
   const plan = {

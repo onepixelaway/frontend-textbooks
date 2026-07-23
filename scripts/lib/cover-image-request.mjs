@@ -92,7 +92,7 @@ export function createCoverImageRequest({ config, plan, outputDir }) {
       width: Math.ceil(frame.widthIn * MINIMUM_COVER_DPI),
       height: Math.ceil(frame.heightIn * MINIMUM_COVER_DPI)
     },
-    safeArea: theme.imagePrompt.coverArt?.safeArea ?? "Keep the focal subject clear of the outer 10% of the frame."
+    safeArea: theme.imagePrompt?.coverArt?.safeArea ?? "Keep the focal subject clear of the outer 10% of the frame."
   };
   const value = {
     schemaVersion: 2,
