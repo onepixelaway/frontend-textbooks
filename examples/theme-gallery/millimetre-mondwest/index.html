@@ -27,19 +27,20 @@
 }
 
 :root {
-  --browser: #888B7E;
+  --browser: #73766A;
   --page: #AEB1A0;
-  --ink: #232323;
-  --heading: #232323;
-  --deck: #35362F;
-  --muted: #5A5E52;
-  --meta: #B95332;
-  --accent: #D56F3D;
+  --ink: #0A0A09;
+  --heading: #0A0A09;
+  --deck: #24251F;
+  --muted: #4C5046;
+  --meta: #E84C16;
+  --accent: #FF7417;
   --soft: #C4C6B8;
-  --rule: #858879;
-  --steel: #303428;
-  --cover-band: #232323;
+  --rule: #7D8073;
+  --steel: #171813;
+  --cover-band: #0A0A09;
   --callout: #C9CBBE;
+  --on-steel: #C9CBBE;
   --font-display: "Millimetre", Arial, sans-serif;
   --font-body: "Departure Mono", monospace;
   --font-ui: "Millimetre", Arial, sans-serif;
@@ -176,6 +177,46 @@ body {
 }
 .cover-author { font: 700 14pt/1.2 var(--font-ui); }
 .cover-note { max-width: 2.7in; color: var(--muted); font: 400 7.5pt/1.35 var(--font-ui); text-align: right; }
+.cover-art { display: none; }
+.cover-minimal-mark { display: none; }
+.cover-page.route-minimal { padding: 0; background: var(--cover-band); }
+.cover-page.route-minimal::before { display: none; }
+.cover-page.route-minimal .cover-art {
+  position: absolute;
+  inset: 0 0 auto;
+  display: block;
+  width: 100%;
+  height: 7.45in;
+  margin: 0;
+  overflow: hidden;
+  background: var(--steel);
+}
+.cover-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cover-page.route-minimal .cover-grid {
+  position: absolute;
+  inset: auto 0 0;
+  height: 3.55in;
+  padding: .38in 1.55in .42in .62in;
+  background: var(--page);
+  grid-template-rows: auto 1fr auto;
+}
+.cover-page.route-minimal .cover-content { align-self: center; }
+.cover-page.route-minimal .cover-title { max-width: 5.9in; font-size: 44pt; line-height: .9; }
+.cover-page.route-minimal .cover-title .accent-word { display: inline; }
+.cover-page.route-minimal .cover-subtitle { max-width: 5.4in; margin-top: .12in; font-size: 9.5pt; line-height: 1.35; }
+.cover-page.route-minimal .cover-footer { padding-top: .14in; }
+.cover-page.route-minimal .cover-author { font-size: 11pt; }
+.cover-page.route-minimal .cover-note { display: none; }
+.cover-page.route-minimal .cover-minimal-mark {
+  position: absolute;
+  z-index: 3;
+  right: .62in;
+  bottom: .58in;
+  display: block;
+  width: .72in;
+  height: 2.39in;
+  background: var(--accent);
+}
 
 .inside-page { padding: .55in .58in .5in; }
 .page-header { display: flex; padding-bottom: .16in; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--rule); }
@@ -212,19 +253,55 @@ body {
 .control-row span { color: var(--muted); font-size: 8pt; line-height: 1.35; }
 .status { padding: 5px 7px; border-radius: 999px; background: var(--accent); color: var(--steel); font: 700 6.5pt/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; }
 
-.plan-intro { display: grid; margin: .34in 0 .28in; gap: .35in; grid-template-columns: 1fr 2.2in; }
-.plan-promise { margin: 0; color: var(--heading); font: 400 19pt/1.17 var(--font-accent); }
-.plan-note { margin: 0; color: var(--muted); font: 400 8.5pt/1.5 var(--font-body); }
+.agency-plan-page { padding-top: .55in; }
+.agency-plan-page .plan-art {
+  width: calc(100% + 1.16in);
+  height: 2.9in;
+  min-height: 0;
+  margin: -.55in -.58in .28in;
+  border: 0;
+  border-bottom: .12in solid var(--accent);
+  border-radius: 0;
+}
+.plan-hero {
+  display: grid;
+  margin: .25in 0 .2in;
+  align-items: end;
+  gap: .3in;
+  grid-template-columns: 1.15fr .85fr;
+}
+.plan-hero-copy { min-width: 0; }
+.plan-hero .page-kicker { margin: 0 0 .14in; }
+.plan-hero .inside-title { margin: 0; font-size: 27pt; }
+.plan-intro { display: grid; gap: .11in; }
+.plan-promise { margin: 0; color: var(--heading); font: 400 13.5pt/1.16 var(--font-accent); }
+.plan-note { margin: 0; color: var(--muted); font: 400 7.3pt/1.4 var(--font-body); }
+.plan-art {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-bottom: .11in solid var(--accent);
+  border-radius: calc(var(--shape-radius) * .25);
+  background: var(--steel);
+}
+.plan-art::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  content: "";
+  pointer-events: none;
+}
+.plan-art img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .roadmap { border-top: 2px solid var(--heading); }
-.phase { display: grid; min-height: 1.31in; padding: .18in 0; align-items: start; border-bottom: 1px solid var(--rule); gap: .18in; grid-template-columns: .68in 1.28in 1fr 1.45in; }
+.phase { display: grid; min-height: .98in; padding: .12in 0; align-items: start; border-bottom: 1px solid var(--rule); gap: .18in; grid-template-columns: .68in 1.28in 1fr 1.45in; }
 .phase-number { color: var(--accent); font: 400 24pt/1 var(--font-accent); }
 .phase-label { padding-top: 4px; color: var(--meta); font-size: 7pt; }
 .phase h3 { margin: 0 0 .07in; color: var(--heading); font: 700 12pt/1.15 var(--font-display); }
-.phase p { margin: 0; color: var(--muted); font-size: 7.8pt; line-height: 1.42; }
+.phase p { margin: 0; color: var(--muted); font-size: 7.5pt; line-height: 1.38; }
 .phase-practice { padding: .1in; border-left: 3px solid var(--accent); background: var(--callout); color: var(--deck); font: 600 7.4pt/1.4 var(--font-ui); }
-.closing-quote { display: grid; margin-top: .3in; padding: .2in; align-items: center; background: var(--steel); color: var(--page); gap: .2in; grid-template-columns: auto 1fr; }
+.closing-quote { display: grid; margin-top: .18in; padding: .14in .2in; align-items: center; background: var(--steel); color: var(--on-steel); gap: .2in; grid-template-columns: auto 1fr; }
 .closing-quote-mark { color: var(--accent); font: 400 30pt/1 var(--font-accent); }
-.closing-quote p { margin: 0; color: var(--page); font: 400 9pt/1.45 var(--font-body); }
+.closing-quote p { margin: 0; color: var(--on-steel); font: 400 9pt/1.45 var(--font-body); }
 
 body[data-variant="playful"] { --shape-radius: 50%; --title-size: 63pt; --motif-rotate: 8deg; }
 body[data-variant="playful"] .cover-title { letter-spacing: -.02em; }
@@ -254,8 +331,10 @@ body[data-variant="technical"] .report-page::after { position: absolute; right: 
 <body data-theme="millimetre-mondwest" data-variant="technical">
   <nav class="sample-nav"><a href="../index.html">← All themes</a><span>Millimetre + Mondwest</span><a href="#control-audit">Next page ↓</a></nav>
 
-  <section class="report-page cover-page" data-page="cover" aria-label="Report cover">
-    <div class="cover-motif" aria-hidden="true"></div>
+  <section class="report-page cover-page has-cover-art route-minimal" data-page="cover" data-cover-route="minimal" aria-label="Report cover">
+
+      <figure class="cover-art"><img src="../../../themes/millimetre-mondwest/samples/weekly-worktable.png" alt="An adult reviewing a weekly planner at a deep-black and sage worktable with bright-orange accents."></figure>
+    <div class="cover-minimal-mark" aria-hidden="true"></div>
     <div class="cover-grid">
       <header class="cover-topline"><span class="eyebrow">Field Report · 2026</span><span class="cover-number">06</span></header>
       <main class="cover-content">
@@ -265,7 +344,7 @@ body[data-variant="technical"] .report-page::after { position: absolute; right: 
       </main>
       <footer class="cover-footer">
         <div><div class="eyebrow">Prepared by</div><div class="cover-author">Tareq Ismail</div></div>
-        <div class="cover-note">Theme pairing: Millimetre + Departure Mono<br>Image prompt intentionally awaiting direction.</div>
+        <div class="cover-note">Theme pairing: Millimetre + Departure Mono<br>Editorial image direction: active.</div>
       </footer>
     </div>
   </section>
@@ -294,13 +373,18 @@ body[data-variant="technical"] .report-page::after { position: absolute; right: 
     </div>
   </section>
 
-  <section class="report-page inside-page" data-page="agency-plan" aria-label="Thirty-day agency plan page">
+  <section class="report-page inside-page agency-plan-page" data-page="agency-plan" aria-label="Thirty-day agency plan page">
+      <figure class="plan-art"><img src="../../../themes/millimetre-mondwest/samples/morning-still-life.png" alt="A coffee cup, notebook, glasses, key, and timer in a flat sage, deep-black, and signal-orange still life."></figure>
     <header class="page-header"><span class="running-head">The Deliberate Life / Action</span><span class="folio">02</span></header>
-    <p class="page-kicker">A four-week operating rhythm</p>
-    <h2 class="inside-title">The 30-Day Agency Plan</h2>
-    <div class="plan-intro">
-      <p class="plan-promise">Control grows when your environment remembers what matters before your mood has to.</p>
-      <p class="plan-note">Each week adds one durable layer. Keep the practices small enough to repeat and visible enough to review.</p>
+    <div class="plan-hero has-plan-art">
+      <div class="plan-hero-copy">
+        <p class="page-kicker">A four-week operating rhythm</p>
+        <h2 class="inside-title">The 30-Day Agency Plan</h2>
+      </div>
+      <div class="plan-intro">
+        <p class="plan-promise">Control grows when your environment remembers what matters before your mood has to.</p>
+        <p class="plan-note">Each week adds one durable layer. Keep the practices small enough to repeat and visible enough to review.</p>
+      </div>
     </div>
 
     <div class="roadmap">

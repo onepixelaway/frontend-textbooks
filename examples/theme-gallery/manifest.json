@@ -45,8 +45,63 @@
         "coverBand": "#0E0E0E",
         "callout": "#2D2D2D"
       },
-      "imagePrompt": null,
-      "imagePromptStatus": "pending-user-supplied",
+      "imagePrompt": {
+        "subjectPlaceholder": "[SUBJECT]",
+        "palettePlaceholder": "[COLOR PALETTE]",
+        "constraintPlaceholder": "[COVER ART CONSTRAINTS]",
+        "coverArt": {
+          "frame": "8.5in x 7.45in with the default cover band; runtime requests resolve the configured crop",
+          "aspectRatio": "1.14:1",
+          "preferredPixels": [
+            "2400x2096",
+            "2048x1792"
+          ],
+          "safeArea": "Keep the focal subject inside the central safe area with roughly 12% padding on every side. Preserve broad negative space around it for flexible cropping."
+        },
+        "guidance": [
+          "Use this prompt for manuscript-grounded cover and divider artwork whenever the mazius-libre theme is active.",
+          "Replace [SUBJECT] with a specific, physically plausible everyday scene derived from the manuscript; the runtime supplies the authoritative palette and production crop.",
+          "Keep HTML/CSS responsible for all typography, preserve the moody underexposed character through light and framing, and use a new subject for each generated image rather than repeating the cover composition."
+        ],
+        "examples": [
+          {
+            "file": "weekly-planning.png",
+            "subject": "An adult alone at a simple desk beside a tall window, writing a weekly plan while a narrow band of low morning light crosses the notebook and the rest of the room falls into deep shadow.",
+            "alt": "An adult writing at a dark desk as a narrow band of morning light crosses a chartreuse notebook."
+          },
+          {
+            "file": "focused-still-life.png",
+            "subject": "An open notebook, analog timer, metal key, and black pen arranged with deliberate spacing where a sharp diagonal of low sunlight cuts across a matte graphite table.",
+            "alt": "A notebook, chartreuse timer, key, and pen divided by hard light and deep shadow on a graphite table."
+          },
+          {
+            "file": "morning-walk.png",
+            "subject": "An adult in a chartreuse jacket walking away along a real paved path through a nearly empty urban park in low winter morning light, with long tree shadows across the ground.",
+            "alt": "An adult in a chartreuse jacket walking through a shadowed park in low winter light."
+          }
+        ],
+        "template": "[SUBJECT], shown as a grounded but enigmatic observational editorial scene in an ordinary real-world setting.\n\n[COLOR PALETTE]\n\nOriginal photorealistic editorial photography with lightly art-directed but physically plausible staging and a moody, quietly cinematic emotional register. Use early-1990s color-film character, dense organic grain, slightly underexposed graphite blacks, restrained highlights, low-angle hard daylight, and long crisp sculptural shadows. Preserve honest skin, fabric, paper, metal, earth, and architectural texture beneath the intentional color grade. Favor uncluttered real locations whose existing surfaces create broad geometric color fields and simple silhouettes. Frame off-center or through an architectural edge when appropriate, hold generous negative space, and let stillness, shadow, crop, and color tension make the ordinary scene feel private, self-possessed, and slightly mysterious.\n\nUse the page, steel, and cover-band roles for the dominant environment and deep shadow masses; ink and heading sparingly for sharp light and highlights; and accent or meta as the only vivid chroma, isolated as one small charged color event. Keep recognizable skin and natural materials plausible but gently harmonized with the authoritative palette. Protect mood by avoiding even exposure, cheerful commercial brightness, generic productivity imagery, lifestyle-ad polish, or evenly distributed color. Avoid overfitting to style references: create an original subject, setting, and composition rather than reusing a recognizable scene, prop arrangement, person, or landmark.\n\nDepict real people, familiar objects, plausible architecture, ordinary activities, and normal scale. The scene must make literal physical sense before styling is applied; its mystery must come only from photographic choices, never from an impossible subject. Bitmap only. No visual metaphors, symbolic paths, portals, impossible light sources, transformed or anthropomorphic objects, oversized props, surreal architecture, fantasy landscapes, dream haze, typography, captions, logos, watermarks, color swatches, borders, collage, glossy CGI, excessive bloom, busy scenery, fashion-campaign posing, or sentimental stock-photo symbolism.\n\n[COVER ART CONSTRAINTS]"
+      },
+      "promptExamples": [
+        {
+          "file": "weekly-planning.png",
+          "subject": "An adult alone at a simple desk beside a tall window, writing a weekly plan while a narrow band of low morning light crosses the notebook and the rest of the room falls into deep shadow.",
+          "alt": "An adult writing at a dark desk as a narrow band of morning light crosses a chartreuse notebook.",
+          "path": "../../../themes/mazius-libre/samples/weekly-planning.png"
+        },
+        {
+          "file": "focused-still-life.png",
+          "subject": "An open notebook, analog timer, metal key, and black pen arranged with deliberate spacing where a sharp diagonal of low sunlight cuts across a matte graphite table.",
+          "alt": "A notebook, chartreuse timer, key, and pen divided by hard light and deep shadow on a graphite table.",
+          "path": "../../../themes/mazius-libre/samples/focused-still-life.png"
+        },
+        {
+          "file": "morning-walk.png",
+          "subject": "An adult in a chartreuse jacket walking away along a real paved path through a nearly empty urban park in low winter morning light, with long tree shadows across the ground.",
+          "alt": "An adult in a chartreuse jacket walking through a shadowed park in low winter light.",
+          "path": "../../../themes/mazius-libre/samples/morning-walk.png"
+        }
+      ],
       "screenshots": [
         "cover.png",
         "control-audit.png",
@@ -94,8 +149,63 @@
         "coverBand": "#F74735",
         "callout": "#FFF1BC"
       },
-      "imagePrompt": null,
-      "imagePromptStatus": "pending-user-supplied",
+      "imagePrompt": {
+        "subjectPlaceholder": "[SUBJECT]",
+        "palettePlaceholder": "[COLOR PALETTE]",
+        "constraintPlaceholder": "[COVER ART CONSTRAINTS]",
+        "coverArt": {
+          "frame": "8.5in x 7.45in with the default cover band; runtime requests resolve the configured crop",
+          "aspectRatio": "1.14:1",
+          "preferredPixels": [
+            "2400x2096",
+            "2048x1792"
+          ],
+          "safeArea": "Keep the primary subject inside the central safe area with roughly 12% padding on every side. Preserve one broad field of breathing room for flexible cropping."
+        },
+        "guidance": [
+          "Use this prompt for manuscript-grounded cover and divider artwork whenever the regina-poppins theme is active.",
+          "Replace [SUBJECT] with one specific, physically plausible everyday action, object, or setting derived from the manuscript; the runtime supplies the authoritative palette and production crop.",
+          "Keep HTML/CSS responsible for typography and vary the ordinary subject across generated images while preserving the grain, rounded shape language, and strong natural shadows."
+        ],
+        "examples": [
+          {
+            "file": "weekly-calendar.png",
+            "subject": "An adult seated at a kitchen table, calmly marking a weekly paper calendar beside a cup and a small bowl.",
+            "alt": "An adult planning the week at a golden kitchen table in a grainy airbrushed illustration."
+          },
+          {
+            "file": "parked-bicycle.png",
+            "subject": "A bicycle parked against the wall of a modest neighborhood shop in clear afternoon sunlight.",
+            "alt": "A coral bicycle parked beside a neighborhood shop, casting a natural plum shadow."
+          },
+          {
+            "file": "sorting-task-cards.png",
+            "subject": "A close view of two hands sorting ordinary blank task cards into three neat groups on a desk.",
+            "alt": "Two hands sorting coral and cream task cards on a golden desk."
+          }
+        ],
+        "template": "[SUBJECT], reduced to a clear observed everyday scene with playful momentum and warm assurance.\n\n[COLOR PALETTE]\n\nOriginal grainy airbrushed editorial illustration with a mid-century poster sensibility: simplified rounded silhouettes, broad overlapping color fields, soft sprayed tonal transitions inside otherwise flat shapes, dense tactile print grain across the whole image, and a hint of paper tooth. Use a plausible hard light source to cast one strong natural directional shadow that supports the composition. Keep the image sophisticated, graphic, and spacious rather than cute or chaotic.\n\nUse page and callout as the luminous ground; heading and accent for the dominant energetic form; ink and steel for structural shadows, contours, and the darkest shapes; and soft or rule for hazy transitions. Limit the image to the authoritative palette and let shape, natural scale, shadow, and grain create depth. Avoid overfitting to style references: invent an original subject, setting, and composition instead of reusing a recognizable scene, prop arrangement, person, animal, building, or landmark.\n\nDepict familiar people, objects, rooms, streets, and activities at normal scale with plausible spatial relationships. The scene must read as an ordinary moment even though its rendering is stylized. Raster illustration only. No visual metaphors, impossible shadows, monumental arches or platforms, transformed objects, dream logic, typography, captions, logos, watermarks, color swatches, borders, collage, photorealism, vector-perfect edges, corporate flat illustration, children's-book styling, psychedelic clutter, glossy 3D, or smooth gradient polish.\n\n[COVER ART CONSTRAINTS]"
+      },
+      "promptExamples": [
+        {
+          "file": "weekly-calendar.png",
+          "subject": "An adult seated at a kitchen table, calmly marking a weekly paper calendar beside a cup and a small bowl.",
+          "alt": "An adult planning the week at a golden kitchen table in a grainy airbrushed illustration.",
+          "path": "../../../themes/regina-poppins/samples/weekly-calendar.png"
+        },
+        {
+          "file": "parked-bicycle.png",
+          "subject": "A bicycle parked against the wall of a modest neighborhood shop in clear afternoon sunlight.",
+          "alt": "A coral bicycle parked beside a neighborhood shop, casting a natural plum shadow.",
+          "path": "../../../themes/regina-poppins/samples/parked-bicycle.png"
+        },
+        {
+          "file": "sorting-task-cards.png",
+          "subject": "A close view of two hands sorting ordinary blank task cards into three neat groups on a desk.",
+          "alt": "Two hands sorting coral and cream task cards on a golden desk.",
+          "path": "../../../themes/regina-poppins/samples/sorting-task-cards.png"
+        }
+      ],
       "screenshots": [
         "cover.png",
         "control-audit.png",
@@ -143,8 +253,63 @@
         "coverBand": "#FF213A",
         "callout": "#FFF0F1"
       },
-      "imagePrompt": null,
-      "imagePromptStatus": "pending-user-supplied",
+      "imagePrompt": {
+        "subjectPlaceholder": "[SUBJECT]",
+        "palettePlaceholder": "[COLOR PALETTE]",
+        "constraintPlaceholder": "[COVER ART CONSTRAINTS]",
+        "coverArt": {
+          "frame": "8.5in x 7.45in with the default cover band; runtime requests resolve the configured crop",
+          "aspectRatio": "1.14:1",
+          "preferredPixels": [
+            "2400x2096",
+            "2048x1792"
+          ],
+          "safeArea": "Keep the primary subject and mechanism inside the central safe area with roughly 12% padding on every side. Preserve a broad exposed-paper field for flexible cropping."
+        },
+        "guidance": [
+          "Use this prompt for manuscript-grounded cover and divider artwork whenever the monument-space theme is active.",
+          "Replace [SUBJECT] with one specific, physically plausible action, object arrangement, workplace, or domestic scene derived from the manuscript; the runtime supplies the authoritative palette and production crop.",
+          "Keep HTML/CSS responsible for typography and vary the ordinary subject across images while preserving the limited inks, exposed paper, halftone construction, and slight registration drift."
+        ],
+        "examples": [
+          {
+            "file": "workbench-routine.png",
+            "subject": "An adult at a compact home workbench adjusting a normal mechanical timer beside a notebook and hand tools.",
+            "alt": "An adult adjusting a small timer at an orderly workbench in red and navy risograph ink."
+          },
+          {
+            "file": "planning-still-life.png",
+            "subject": "A mechanical metronome, plain key, and folded blank planning sheet arranged as a precise still life.",
+            "alt": "A red metronome, navy key, and folded paper rendered as a limited-ink risograph still life."
+          },
+          {
+            "file": "organized-workspace.png",
+            "subject": "An adult organizing labeled storage boxes and folders on ordinary shelves in a small home office.",
+            "alt": "An adult arranging boxes and folders on shelves in a limited red and navy risograph."
+          }
+        ],
+        "template": "[SUBJECT], organized as one decisive observational editorial image of an ordinary action, object arrangement, workplace, or domestic setting.\n\n[COLOR PALETTE]\n\nOriginal two-to-three-ink risograph and screenprint illustration on tactile uncoated paper. Use simplified observational drawing, bold asymmetric cropping, large silhouettes, broad exposed-paper negative space, coarse visible halftone dots, stipple, crosshatching, ink overprint, subtle ink spread, slight registration drift, and occasional uneven density. Build every middle value through dot density, line work, overprint, and exposed paper rather than continuous-tone shading or digital gradients.\n\nUse page and callout as the exposed paper ground; heading and accent as the dominant signal ink; ink and steel sparingly for the hardest shadows, structural contours, and densest overprint; and soft or rule only as light halftone values. Keep the authoritative palette limited and let print mechanics create depth. Preserve normal object proportions, familiar human scale, and believable spatial relationships. Avoid overfitting to style references: invent an original subject, setting, and composition rather than repeating a recognizable house, still life, portrait, landscape, vehicle, plant, or landmark.\n\nThe depicted moment must be physically plausible and immediately recognizable before the print treatment is applied. Raster print illustration only. No allegorical machines, giant controls, oversized structural components, symbolic systems, impossible construction, typography, captions, numbers, logos, watermarks, color swatches, polished vector edges, continuous-tone gradients, photorealism, 3D rendering, retro advertising, propaganda posing, decorative gears, science-fiction styling, or grunge that obscures the subject.\n\n[COVER ART CONSTRAINTS]"
+      },
+      "promptExamples": [
+        {
+          "file": "workbench-routine.png",
+          "subject": "An adult at a compact home workbench adjusting a normal mechanical timer beside a notebook and hand tools.",
+          "alt": "An adult adjusting a small timer at an orderly workbench in red and navy risograph ink.",
+          "path": "../../../themes/monument-space/samples/workbench-routine.png"
+        },
+        {
+          "file": "planning-still-life.png",
+          "subject": "A mechanical metronome, plain key, and folded blank planning sheet arranged as a precise still life.",
+          "alt": "A red metronome, navy key, and folded paper rendered as a limited-ink risograph still life.",
+          "path": "../../../themes/monument-space/samples/planning-still-life.png"
+        },
+        {
+          "file": "organized-workspace.png",
+          "subject": "An adult organizing labeled storage boxes and folders on ordinary shelves in a small home office.",
+          "alt": "An adult arranging boxes and folders on shelves in a limited red and navy risograph.",
+          "path": "../../../themes/monument-space/samples/organized-workspace.png"
+        }
+      ],
       "screenshots": [
         "cover.png",
         "control-audit.png",
@@ -192,8 +357,63 @@
         "coverBand": "#000066",
         "callout": "#0B0BC3"
       },
-      "imagePrompt": null,
-      "imagePromptStatus": "pending-user-supplied",
+      "imagePrompt": {
+        "subjectPlaceholder": "[SUBJECT]",
+        "palettePlaceholder": "[COLOR PALETTE]",
+        "constraintPlaceholder": "[COVER ART CONSTRAINTS]",
+        "coverArt": {
+          "frame": "8.5in x 7.45in with the default cover band; runtime requests resolve the configured crop",
+          "aspectRatio": "1.14:1",
+          "preferredPixels": [
+            "2400x2096",
+            "2048x1792"
+          ],
+          "safeArea": "Keep the primary subject inside the central safe area with roughly 12% padding on every side. Preserve generous uninterrupted negative space for flexible cropping."
+        },
+        "guidance": [
+          "Use this prompt for manuscript-grounded cover and divider artwork whenever the sporting-agrandir theme is active.",
+          "Replace [SUBJECT] with one specific, physically plausible everyday action, familiar object arrangement, or sparse real-world scene derived from the manuscript; the runtime supplies the authoritative palette and production crop.",
+          "Keep HTML/CSS responsible for typography and vary the ordinary subject across generated images while preserving the wobbly contours, scratchy fills, flat fields, gentle personality, and abundant negative space."
+        ],
+        "examples": [
+          {
+            "file": "weekly-desk.png",
+            "subject": "An adult seated at a small desk, looking down while planning the week in an open notebook beside a cup and desk lamp.",
+            "alt": "An adult planning the week at a small desk in a naïve electric-blue illustration."
+          },
+          {
+            "file": "chair-and-plant.png",
+            "subject": "A plain wooden chair with a small potted three-leaf plant placed beside it in a quiet room.",
+            "alt": "An off-white chair beside a small acid-lime potted plant on an electric-blue field."
+          },
+          {
+            "file": "patio-break.png",
+            "subject": "An adult sitting beneath a normal patio umbrella at a small outdoor table with a cup and closed notebook.",
+            "alt": "An adult taking a quiet break beneath a normal off-white patio umbrella."
+          }
+        ],
+        "template": "[SUBJECT], staged as one quiet, ordinary editorial moment that feels humane, self-possessed, and relaxed.\n\n[COLOR PALETTE]\n\nOriginal naïve hand-drawn editorial illustration with intelligent restraint. Use wobbly ink contours, scratchy colored-pencil and wax-crayon fill marks, subtly uneven opaque color fields, deliberately simple anatomy and perspective, charming awkwardness, sparse front-facing staging, and visible handmade paper texture. Keep forms flat and immediately readable, preserve familiar proportions and normal spatial relationships, and use generous uninterrupted negative space.\n\nUse page and callout as the dominant field; ink and heading for primary subjects and open shapes; accent and meta as the single bright focal detail; steel and cover-band for outlines and the darkest fills; and deck or muted for restrained secondary areas. Limit the image to the authoritative palette and do not introduce naturalistic colors. Avoid overfitting to style references: invent an original subject, character, object, setting, and composition rather than repeating a recognizable portrait, landscape, house, animal group, beverage, floral still life, or signature.\n\nDepict real everyday activities, familiar objects, plausible rooms or outdoor places, and normal scale. Let the drawing style supply the personality; do not make the subject strange. Raster illustration only. No anthropomorphic objects, impossible growth, giant props, tiny people, surreal scale, symbolic transformation, dream logic, typography, captions, numbers, logos, watermarks, color swatches, borders, collage, photorealism, smooth vector geometry, gradients, polished 3D, corporate doodle styling, emoji faces, children's-book storytelling, slapstick exaggeration, or decorative clutter.\n\n[COVER ART CONSTRAINTS]"
+      },
+      "promptExamples": [
+        {
+          "file": "weekly-desk.png",
+          "subject": "An adult seated at a small desk, looking down while planning the week in an open notebook beside a cup and desk lamp.",
+          "alt": "An adult planning the week at a small desk in a naïve electric-blue illustration.",
+          "path": "../../../themes/sporting-agrandir/samples/weekly-desk.png"
+        },
+        {
+          "file": "chair-and-plant.png",
+          "subject": "A plain wooden chair with a small potted three-leaf plant placed beside it in a quiet room.",
+          "alt": "An off-white chair beside a small acid-lime potted plant on an electric-blue field.",
+          "path": "../../../themes/sporting-agrandir/samples/chair-and-plant.png"
+        },
+        {
+          "file": "patio-break.png",
+          "subject": "An adult sitting beneath a normal patio umbrella at a small outdoor table with a cup and closed notebook.",
+          "alt": "An adult taking a quiet break beneath a normal off-white patio umbrella.",
+          "path": "../../../themes/sporting-agrandir/samples/patio-break.png"
+        }
+      ],
       "screenshots": [
         "cover.png",
         "control-audit.png",
@@ -227,22 +447,77 @@
         }
       ],
       "colors": {
-        "browser": "#888B7E",
+        "browser": "#73766A",
         "page": "#AEB1A0",
-        "ink": "#232323",
-        "heading": "#232323",
-        "deck": "#35362F",
-        "muted": "#5A5E52",
-        "meta": "#B95332",
-        "accent": "#D56F3D",
+        "ink": "#0A0A09",
+        "heading": "#0A0A09",
+        "deck": "#24251F",
+        "muted": "#4C5046",
+        "meta": "#E84C16",
+        "accent": "#FF7417",
         "soft": "#C4C6B8",
-        "rule": "#858879",
-        "steel": "#303428",
-        "coverBand": "#232323",
+        "rule": "#7D8073",
+        "steel": "#171813",
+        "coverBand": "#0A0A09",
         "callout": "#C9CBBE"
       },
-      "imagePrompt": null,
-      "imagePromptStatus": "pending-user-supplied",
+      "imagePrompt": {
+        "subjectPlaceholder": "[SUBJECT]",
+        "palettePlaceholder": "[COLOR PALETTE]",
+        "constraintPlaceholder": "[COVER ART CONSTRAINTS]",
+        "coverArt": {
+          "frame": "8.5in x 7.45in with the default cover band; runtime requests resolve the configured crop",
+          "aspectRatio": "1.14:1",
+          "preferredPixels": [
+            "2400x2096",
+            "2048x1792"
+          ],
+          "safeArea": "Keep the primary subject inside the central safe area with roughly 12% padding on every side. Preserve one broad sage or charcoal field for flexible cropping."
+        },
+        "guidance": [
+          "Use this prompt for manuscript-grounded cover and divider artwork whenever the millimetre-mondwest theme is active.",
+          "Replace [SUBJECT] with one specific, physically plausible everyday action, still life, room, street, or landscape derived from the manuscript; the runtime supplies the authoritative palette and production crop.",
+          "Keep HTML/CSS responsible for typography and vary ordinary subjects across generated images while preserving the heavy contours, broad deep-black masses, vivid signal-orange focal accents, flat matte fields, strong silhouettes, restrained print texture, and normal scale."
+        ],
+        "examples": [
+          {
+            "file": "weekly-worktable.png",
+            "subject": "An adult seated at a compact worktable, calmly reviewing an open blank weekly planner beside a normal desk lamp, ceramic cup, pencil, and analog clock.",
+            "alt": "An adult reviewing a weekly planner at a deep-black and sage worktable with bright-orange accents."
+          },
+          {
+            "file": "morning-still-life.png",
+            "subject": "A ceramic coffee cup, closed notebook, reading glasses, plain key, and small analog timer arranged naturally on a round breakfast table.",
+            "alt": "A coffee cup, notebook, glasses, key, and timer in a flat sage, deep-black, and signal-orange still life."
+          },
+          {
+            "file": "neighborhood-ride.png",
+            "subject": "An adult riding a bicycle at normal speed along a quiet neighborhood street with modest houses, trees, and a low wall in the distance.",
+            "alt": "A cyclist traveling along an ordinary sage and deep-black neighborhood street with bright-orange details."
+          }
+        ],
+        "template": "[SUBJECT], distilled into a bold, grounded editorial illustration of an ordinary real-world moment.\n\n[COLOR PALETTE]\n\nOriginal flat graphic illustration with the character of a hand-pulled screenprint poster: heavy ink-black contour lines, broad pools of velvety black, large matte opaque color fields, simplified geometric anatomy and architecture, rounded organic silhouettes, confident cropped shapes, compressed but readable perspective, sparse interior marks, and subtle paper tooth or ink-edge irregularity. Use almost no modeled shading; create depth through overlap, scale, silhouette, and the forceful balance between dense black masses and open ground. Let true near-black occupy a substantial portion of the composition instead of diluting it into olive charcoal. Keep the composition assured, stylish, and immediately legible rather than cute, diagrammatic, or decorative.\n\nUse page and callout as the broad sage ground; ink, heading, steel, and cover-band for dominant outlines, clothing, shadow shapes, and deep negative space; meta and accent for limited but vivid vermilion and signal-orange focal areas; and soft, rule, deck, or muted for restrained supporting fields. Preserve crisp tonal separation: blacks must read as deep black, and oranges must read as clean, luminous, saturated orange rather than brown, rust, ochre, or muted terracotta. Limit the image to the authoritative palette. Avoid overfitting to style references: create an original subject, setting, and composition instead of repeating a recognizable portrait, landscape, house, boat, cup arrangement, plant grouping, or landmark.\n\nDepict familiar people, objects, rooms, streets, and landscapes at normal scale with plausible anatomy, ordinary perspective, and physically coherent relationships. The scene must make literal sense before it is simplified; let contour, silhouette, crop, and flat color provide the visual character. Raster illustration only. No visual metaphors, dream logic, floating objects, impossible suns or clouds, altered anatomy, fused figures, surreal architecture, fantasy scenery, typography, captions, numbers, logos, watermarks, color swatches, borders, collage, photorealism, gradients, airbrush shading, glossy 3D, vector-perfect corporate illustration, psychedelic patterning, or decorative clutter.\n\n[COVER ART CONSTRAINTS]"
+      },
+      "promptExamples": [
+        {
+          "file": "weekly-worktable.png",
+          "subject": "An adult seated at a compact worktable, calmly reviewing an open blank weekly planner beside a normal desk lamp, ceramic cup, pencil, and analog clock.",
+          "alt": "An adult reviewing a weekly planner at a deep-black and sage worktable with bright-orange accents.",
+          "path": "../../../themes/millimetre-mondwest/samples/weekly-worktable.png"
+        },
+        {
+          "file": "morning-still-life.png",
+          "subject": "A ceramic coffee cup, closed notebook, reading glasses, plain key, and small analog timer arranged naturally on a round breakfast table.",
+          "alt": "A coffee cup, notebook, glasses, key, and timer in a flat sage, deep-black, and signal-orange still life.",
+          "path": "../../../themes/millimetre-mondwest/samples/morning-still-life.png"
+        },
+        {
+          "file": "neighborhood-ride.png",
+          "subject": "An adult riding a bicycle at normal speed along a quiet neighborhood street with modest houses, trees, and a low wall in the distance.",
+          "alt": "A cyclist traveling along an ordinary sage and deep-black neighborhood street with bright-orange details.",
+          "path": "../../../themes/millimetre-mondwest/samples/neighborhood-ride.png"
+        }
+      ],
       "screenshots": [
         "cover.png",
         "control-audit.png",

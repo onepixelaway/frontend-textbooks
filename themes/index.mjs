@@ -1,11 +1,11 @@
 import alumniTheme from "./alumni/index.mjs";
 import colbaltTheme from "./colbalt/index.mjs";
-import dribbblePairingThemes from "./dribbble-pairings.mjs";
+import editorialThemes from "./editorial-themes.mjs";
 
 const localThemes = [
   colbaltTheme,
   alumniTheme,
-  ...dribbblePairingThemes,
+  ...editorialThemes,
   {
     id: "field-guide",
     colors: {

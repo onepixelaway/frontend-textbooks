@@ -4,7 +4,7 @@ import { copyFile, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import dribbblePairingThemes, { DRIBBBLE_PAIRING_ARTICLE } from "../themes/dribbble-pairings.mjs";
+import editorialThemes, { PAIRING_ARTICLE_CREDIT } from "../themes/editorial-themes.mjs";
 import { prepareThemeFonts } from "../themes/font-assets.mjs";
 import { publishGeneratedTargets } from "./lib/generated-publication.mjs";
 import { themeColors, themeFontStack } from "../themes/index.mjs";
@@ -47,6 +47,26 @@ function webPath(path) {
   return path.split(sep).join("/");
 }
 
+function relativeLuminance(color) {
+  const channels = color.slice(1).match(/.{2}/gu).map((channel) => Number.parseInt(channel, 16) / 255);
+  const [red, green, blue] = channels.map((channel) => (
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  ));
+  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
+}
+
+function contrastRatio(first, second) {
+  const light = Math.max(relativeLuminance(first), relativeLuminance(second));
+  const dark = Math.min(relativeLuminance(first), relativeLuminance(second));
+  return (light + 0.05) / (dark + 0.05);
+}
+
+function strongestContrast(background, candidates) {
+  return candidates.reduce((best, candidate) => (
+    contrastRatio(background, candidate) > contrastRatio(background, best) ? candidate : best
+  ));
+}
+
 function fontFaceCss(theme, sampleDirectory) {
   const fontDirectory = join(repositoryRoot, "themes", theme.id, "fonts");
   const sourcePrefix = JSON.stringify(`${webPath(relative(sampleDirectory, fontDirectory))}/`).slice(1, -1);
@@ -67,8 +87,29 @@ async function preserveScreenshot(source, destination) {
   await copyFile(source, destination);
 }
 
+async function resolvePromptExamples(theme, sampleDirectory) {
+  const examples = theme.imagePrompt?.examples ?? [];
+  if (!examples.length) return [];
+  const seen = new Set();
+  const resolvedExamples = [];
+  for (const example of examples) {
+    if (!example.file || basename(example.file) !== example.file || seen.has(example.file)) {
+      throw new Error(`Theme ${theme.id} has an invalid or duplicate prompt example filename: ${example.file}`);
+    }
+    seen.add(example.file);
+    const source = join(repositoryRoot, "themes", theme.id, "samples", example.file);
+    const stat = await lstat(source);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error(`Theme prompt example must be a regular file: ${source}`);
+    }
+    resolvedExamples.push({ ...example, path: webPath(relative(sampleDirectory, source)) });
+  }
+  return resolvedExamples;
+}
+
 function themeCss(theme, sampleDirectory) {
   const colors = themeColors(theme);
+  const onSteel = strongestContrast(colors.steel, [colors.ink, colors.page, colors.soft, colors.callout, colors.accent]);
   return `${fontFaceCss(theme, sampleDirectory)}
 
 :root {
@@ -85,6 +126,7 @@ function themeCss(theme, sampleDirectory) {
   --steel: ${colors.steel};
   --cover-band: ${colors.coverBand};
   --callout: ${colors.callout};
+  --on-steel: ${onSteel};
   --font-display: ${themeFontStack(theme, "display")};
   --font-body: ${themeFontStack(theme, "body")};
   --font-ui: ${themeFontStack(theme, "ui")};
@@ -221,6 +263,46 @@ body {
 }
 .cover-author { font: 700 14pt/1.2 var(--font-ui); }
 .cover-note { max-width: 2.7in; color: var(--muted); font: 400 7.5pt/1.35 var(--font-ui); text-align: right; }
+.cover-art { display: none; }
+.cover-minimal-mark { display: none; }
+.cover-page.route-minimal { padding: 0; background: var(--cover-band); }
+.cover-page.route-minimal::before { display: none; }
+.cover-page.route-minimal .cover-art {
+  position: absolute;
+  inset: 0 0 auto;
+  display: block;
+  width: 100%;
+  height: 7.45in;
+  margin: 0;
+  overflow: hidden;
+  background: var(--steel);
+}
+.cover-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cover-page.route-minimal .cover-grid {
+  position: absolute;
+  inset: auto 0 0;
+  height: 3.55in;
+  padding: .38in 1.55in .42in .62in;
+  background: var(--page);
+  grid-template-rows: auto 1fr auto;
+}
+.cover-page.route-minimal .cover-content { align-self: center; }
+.cover-page.route-minimal .cover-title { max-width: 5.9in; font-size: 44pt; line-height: .9; }
+.cover-page.route-minimal .cover-title .accent-word { display: inline; }
+.cover-page.route-minimal .cover-subtitle { max-width: 5.4in; margin-top: .12in; font-size: 9.5pt; line-height: 1.35; }
+.cover-page.route-minimal .cover-footer { padding-top: .14in; }
+.cover-page.route-minimal .cover-author { font-size: 11pt; }
+.cover-page.route-minimal .cover-note { display: none; }
+.cover-page.route-minimal .cover-minimal-mark {
+  position: absolute;
+  z-index: 3;
+  right: .62in;
+  bottom: .58in;
+  display: block;
+  width: .72in;
+  height: 2.39in;
+  background: var(--accent);
+}
 
 .inside-page { padding: .55in .58in .5in; }
 .page-header { display: flex; padding-bottom: .16in; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--rule); }
@@ -257,19 +339,55 @@ body {
 .control-row span { color: var(--muted); font-size: 8pt; line-height: 1.35; }
 .status { padding: 5px 7px; border-radius: 999px; background: var(--accent); color: var(--steel); font: 700 6.5pt/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; }
 
-.plan-intro { display: grid; margin: .34in 0 .28in; gap: .35in; grid-template-columns: 1fr 2.2in; }
-.plan-promise { margin: 0; color: var(--heading); font: 400 19pt/1.17 var(--font-accent); }
-.plan-note { margin: 0; color: var(--muted); font: 400 8.5pt/1.5 var(--font-body); }
+.agency-plan-page { padding-top: .55in; }
+.agency-plan-page .plan-art {
+  width: calc(100% + 1.16in);
+  height: 2.9in;
+  min-height: 0;
+  margin: -.55in -.58in .28in;
+  border: 0;
+  border-bottom: .12in solid var(--accent);
+  border-radius: 0;
+}
+.plan-hero {
+  display: grid;
+  margin: .25in 0 .2in;
+  align-items: end;
+  gap: .3in;
+  grid-template-columns: 1.15fr .85fr;
+}
+.plan-hero-copy { min-width: 0; }
+.plan-hero .page-kicker { margin: 0 0 .14in; }
+.plan-hero .inside-title { margin: 0; font-size: 27pt; }
+.plan-intro { display: grid; gap: .11in; }
+.plan-promise { margin: 0; color: var(--heading); font: 400 13.5pt/1.16 var(--font-accent); }
+.plan-note { margin: 0; color: var(--muted); font: 400 7.3pt/1.4 var(--font-body); }
+.plan-art {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-bottom: .11in solid var(--accent);
+  border-radius: calc(var(--shape-radius) * .25);
+  background: var(--steel);
+}
+.plan-art::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  content: "";
+  pointer-events: none;
+}
+.plan-art img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .roadmap { border-top: 2px solid var(--heading); }
-.phase { display: grid; min-height: 1.31in; padding: .18in 0; align-items: start; border-bottom: 1px solid var(--rule); gap: .18in; grid-template-columns: .68in 1.28in 1fr 1.45in; }
+.phase { display: grid; min-height: .98in; padding: .12in 0; align-items: start; border-bottom: 1px solid var(--rule); gap: .18in; grid-template-columns: .68in 1.28in 1fr 1.45in; }
 .phase-number { color: var(--accent); font: 400 24pt/1 var(--font-accent); }
 .phase-label { padding-top: 4px; color: var(--meta); font-size: 7pt; }
 .phase h3 { margin: 0 0 .07in; color: var(--heading); font: 700 12pt/1.15 var(--font-display); }
-.phase p { margin: 0; color: var(--muted); font-size: 7.8pt; line-height: 1.42; }
+.phase p { margin: 0; color: var(--muted); font-size: 7.5pt; line-height: 1.38; }
 .phase-practice { padding: .1in; border-left: 3px solid var(--accent); background: var(--callout); color: var(--deck); font: 600 7.4pt/1.4 var(--font-ui); }
-.closing-quote { display: grid; margin-top: .3in; padding: .2in; align-items: center; background: var(--steel); color: var(--page); gap: .2in; grid-template-columns: auto 1fr; }
+.closing-quote { display: grid; margin-top: .18in; padding: .14in .2in; align-items: center; background: var(--steel); color: var(--on-steel); gap: .2in; grid-template-columns: auto 1fr; }
 .closing-quote-mark { color: var(--accent); font: 400 30pt/1 var(--font-accent); }
-.closing-quote p { margin: 0; color: var(--page); font: 400 9pt/1.45 var(--font-body); }
+.closing-quote p { margin: 0; color: var(--on-steel); font: 400 9pt/1.45 var(--font-body); }
 
 body[data-variant="playful"] { --shape-radius: 50%; --title-size: 63pt; --motif-rotate: 8deg; }
 body[data-variant="playful"] .cover-title { letter-spacing: -.02em; }
@@ -297,10 +415,22 @@ body[data-variant="technical"] .report-page::after { position: absolute; right: 
 `;
 }
 
-function sampleHtml(theme, sampleDirectory) {
+function sampleHtml(theme, sampleDirectory, promptExamples) {
   const detail = sampleDetail(theme);
   const originalPairing = theme.inspiration.originalPairing.join(" + ");
   const bundledPairing = theme.inspiration.bundledPairing.join(" + ");
+  const coverArtwork = promptExamples[0];
+  const agencyArtwork = promptExamples[1];
+  const coverArtworkHtml = coverArtwork
+    ? `      <figure class="cover-art"><img src="${escapeHtml(coverArtwork.path)}" alt="${escapeHtml(coverArtwork.alt)}"></figure>`
+    : "";
+  const agencyArtworkHtml = agencyArtwork
+    ? `      <figure class="plan-art"><img src="${escapeHtml(agencyArtwork.path)}" alt="${escapeHtml(agencyArtwork.alt)}"></figure>`
+    : "";
+  const coverMotifHtml = coverArtwork ? "" : `    <div class="cover-motif" aria-hidden="true"></div>`;
+  const coverNote = coverArtwork
+    ? `Theme pairing: ${escapeHtml(bundledPairing)}<br>Editorial image direction: active.`
+    : `Theme pairing: ${escapeHtml(bundledPairing)}<br>Image prompt intentionally awaiting direction.`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -312,8 +442,10 @@ function sampleHtml(theme, sampleDirectory) {
 <body data-theme="${escapeHtml(theme.id)}" data-variant="${escapeHtml(detail.variant)}">
   <nav class="sample-nav"><a href="../index.html">← All themes</a><span>${escapeHtml(originalPairing)}</span><a href="#control-audit">Next page ↓</a></nav>
 
-  <section class="report-page cover-page" data-page="cover" aria-label="Report cover">
-    <div class="cover-motif" aria-hidden="true"></div>
+  <section class="report-page cover-page${coverArtwork ? " has-cover-art route-minimal" : ""}" data-page="cover"${coverArtwork ? ' data-cover-route="minimal"' : ""} aria-label="Report cover">
+${coverMotifHtml}
+${coverArtworkHtml}
+${coverArtwork ? '    <div class="cover-minimal-mark" aria-hidden="true"></div>' : ""}
     <div class="cover-grid">
       <header class="cover-topline"><span class="eyebrow">Field Report · 2026</span><span class="cover-number">${escapeHtml(detail.folio)}</span></header>
       <main class="cover-content">
@@ -323,7 +455,7 @@ function sampleHtml(theme, sampleDirectory) {
       </main>
       <footer class="cover-footer">
         <div><div class="eyebrow">Prepared by</div><div class="cover-author">${report.author}</div></div>
-        <div class="cover-note">Theme pairing: ${escapeHtml(bundledPairing)}<br>Image prompt intentionally awaiting direction.</div>
+        <div class="cover-note">${coverNote}</div>
       </footer>
     </div>
   </section>
@@ -352,13 +484,18 @@ function sampleHtml(theme, sampleDirectory) {
     </div>
   </section>
 
-  <section class="report-page inside-page" data-page="agency-plan" aria-label="Thirty-day agency plan page">
+  <section class="report-page inside-page agency-plan-page" data-page="agency-plan" aria-label="Thirty-day agency plan page">
+${agencyArtworkHtml}
     <header class="page-header"><span class="running-head">${report.title} / Action</span><span class="folio">02</span></header>
-    <p class="page-kicker">A four-week operating rhythm</p>
-    <h2 class="inside-title">The 30-Day Agency Plan</h2>
-    <div class="plan-intro">
-      <p class="plan-promise">Control grows when your environment remembers what matters before your mood has to.</p>
-      <p class="plan-note">Each week adds one durable layer. Keep the practices small enough to repeat and visible enough to review.</p>
+    <div class="plan-hero${agencyArtwork ? " has-plan-art" : ""}">
+      <div class="plan-hero-copy">
+        <p class="page-kicker">A four-week operating rhythm</p>
+        <h2 class="inside-title">The 30-Day Agency Plan</h2>
+      </div>
+      <div class="plan-intro">
+        <p class="plan-promise">Control grows when your environment remembers what matters before your mood has to.</p>
+        <p class="plan-note">Each week adds one durable layer. Keep the practices small enough to repeat and visible enough to review.</p>
+      </div>
     </div>
 
     <div class="roadmap">
@@ -391,7 +528,7 @@ function galleryHtml(themes) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dribbble Font Pairing Theme Gallery</title>
+  <title>Editorial Theme Gallery</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; background: #101114; color: #f7f4ea; font-family: Inter, system-ui, sans-serif; }
@@ -417,9 +554,9 @@ function galleryHtml(themes) {
   </style>
 </head>
 <body>
-  <header><span class="kicker">${themes.length} themes · ${themes.length * THEME_SAMPLE_PAGE_NAMES.length} report pages</span><h1>Expressive type, built into the theme system.</h1><p>Every theme applies one pairing to the same fictional report, <em>${report.title}</em> by ${report.author}. Covers use typographic compositions while their image prompts remain intentionally blank for the user’s forthcoming direction.</p></header>
+  <header><span class="kicker">${themes.length} themes · ${themes.length * THEME_SAMPLE_PAGE_NAMES.length} report pages</span><h1>Expressive type, built into the theme system.</h1><p>Every theme applies one pairing to the same fictional report, <em>${report.title}</em> by ${report.author}. Approved image directions and cover artwork are being added one theme at a time.</p></header>
   <main class="gallery">${cards}</main>
-  <footer>Pairings and specimen palettes inspired by <a href="${DRIBBBLE_PAIRING_ARTICLE.url}">“${DRIBBBLE_PAIRING_ARTICLE.title}”</a>, written by ${DRIBBBLE_PAIRING_ARTICLE.writer} and curated by ${DRIBBBLE_PAIRING_ARTICLE.curator}. Restricted source fonts use documented redistributable alternatives.</footer>
+  <footer>Original pairing inspiration credited to <a href="${PAIRING_ARTICLE_CREDIT.url}">“${PAIRING_ARTICLE_CREDIT.title}”</a>, written by ${PAIRING_ARTICLE_CREDIT.writer} and curated by ${PAIRING_ARTICLE_CREDIT.curator}. Restricted source fonts use documented redistributable alternatives.</footer>
 </body>
 </html>
 `;
@@ -441,7 +578,7 @@ export async function buildThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPLE
   const stageContainer = await mkdtemp(join(outputParent, ".theme-gallery-stage-"));
   const stageRoot = join(stageContainer, "next");
   const stagedOutput = join(stageRoot, outputTarget);
-  const sampleThemes = dribbblePairingThemes.map((theme, index) => ({ ...theme, sampleIndex: index + 1 }));
+  const sampleThemes = editorialThemes.map((theme, index) => ({ ...theme, sampleIndex: index + 1 }));
   try {
     await mkdir(stagedOutput, { recursive: true });
     const manifestThemes = [];
@@ -449,7 +586,8 @@ export async function buildThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPLE
       const stagedSampleDirectory = join(stagedOutput, theme.id);
       const publishedSampleDirectory = join(absoluteOutput, theme.id);
       await mkdir(stagedSampleDirectory, { recursive: true });
-      await writeFile(join(stagedSampleDirectory, "index.html"), sampleHtml(theme, publishedSampleDirectory));
+      const promptExamples = await resolvePromptExamples(theme, publishedSampleDirectory);
+      await writeFile(join(stagedSampleDirectory, "index.html"), sampleHtml(theme, publishedSampleDirectory, promptExamples));
       await Promise.all(THEME_SAMPLE_PAGE_NAMES.map((name) => preserveScreenshot(
         join(publishedSampleDirectory, `${name}.png`),
         join(stagedSampleDirectory, `${name}.png`)
@@ -466,6 +604,7 @@ export async function buildThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPLE
         colors: themeColors(theme),
         imagePrompt: theme.imagePrompt,
         imagePromptStatus: theme.imagePromptStatus,
+        promptExamples,
         screenshots: THEME_SAMPLE_PAGE_NAMES.map((name) => `${name}.png`)
       });
     }
@@ -474,9 +613,9 @@ export async function buildThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPLE
     await writeFile(join(stagedOutput, "manifest.json"), `${JSON.stringify({
       schemaVersion: 1,
       article: {
-        url: DRIBBBLE_PAIRING_ARTICLE.url,
-        writer: DRIBBBLE_PAIRING_ARTICLE.writer,
-        curator: DRIBBBLE_PAIRING_ARTICLE.curator
+        url: PAIRING_ARTICLE_CREDIT.url,
+        writer: PAIRING_ARTICLE_CREDIT.writer,
+        curator: PAIRING_ARTICLE_CREDIT.curator
       },
       report,
       themes: manifestThemes

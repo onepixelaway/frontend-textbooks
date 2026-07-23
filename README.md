@@ -149,15 +149,25 @@ The scaffold also includes an `alumni` theme inspired by a warm single-ink edito
 
 Five additional themes adapt selected pairings from [“8 expressive free font combos for your next design”](https://dribbble.com/stories/2020/06/10/free-font-combinations) into executable, offline packs:
 
-| Theme ID | Original pairing | Bundled pairing |
-| --- | --- | --- |
-| `mazius-libre` | Mazius Display + Libre Baskerville | Mazius Display + Libre Baskerville |
-| `regina-poppins` | Regina Black + Poppins | Shrikhand + Poppins |
-| `monument-space` | Monument Extended + Space Mono | Archivo Black + Space Mono |
-| `sporting-agrandir` | Sporting Grotesque + Agrandir | Sporting Grotesque + Barlow Semi Condensed |
-| `millimetre-mondwest` | Millimetre + Mondwest | Millimetre + Departure Mono |
+| Theme | Rendered preview | Bundled typography | Palette and image direction |
+| --- | --- | --- | --- |
+| [`mazius-libre`](examples/theme-gallery/mazius-libre/index.html) | <a href="examples/theme-gallery/mazius-libre/index.html"><img src="examples/theme-gallery/mazius-libre/cover.png" width="112" alt="Mazius Libre theme cover"></a> | Mazius Display + Libre Baskerville | Graphite `#232323`, paper `#F9F9F9`, chartreuse `#E4FF5E`; moody hard-daylight photography with deep shadow and disciplined negative space. |
+| [`regina-poppins`](examples/theme-gallery/regina-poppins/index.html) | <a href="examples/theme-gallery/regina-poppins/index.html"><img src="examples/theme-gallery/regina-poppins/cover.png" width="112" alt="Regina Poppins theme cover"></a> | Shrikhand + Poppins | Golden `#FFDB60`, coral `#F74735`, plum `#3A2031`; grainy airbrushed illustration with rounded poster forms and natural shadows. |
+| [`monument-space`](examples/theme-gallery/monument-space/index.html) | <a href="examples/theme-gallery/monument-space/index.html"><img src="examples/theme-gallery/monument-space/cover.png" width="112" alt="Monument Space theme cover"></a> | Archivo Black + Space Mono | Paper `#F4F4EA`, signal red `#FF213A`, navy `#11182E`; limited-ink risograph illustration with exposed paper and coarse halftones. |
+| [`sporting-agrandir`](examples/theme-gallery/sporting-agrandir/index.html) | <a href="examples/theme-gallery/sporting-agrandir/index.html"><img src="examples/theme-gallery/sporting-agrandir/cover.png" width="112" alt="Sporting Agrandir theme cover"></a> | Sporting Grotesque + Barlow Semi Condensed | Electric blue `#0000FE`, off-white `#FBFBEF`, acid lime `#C9FF68`; naïve hand-drawn illustration with flat fields and scratchy fills. |
+| [`millimetre-mondwest`](examples/theme-gallery/millimetre-mondwest/index.html) | <a href="examples/theme-gallery/millimetre-mondwest/index.html"><img src="examples/theme-gallery/millimetre-mondwest/cover.png" width="112" alt="Millimetre Mondwest theme cover"></a> | Millimetre + Departure Mono | Sage `#AEB1A0`, ink black `#0A0A09`, signal orange `#FF7417`; bold screenprint-like illustration with heavy contours and matte graphic fields. |
 
-The replacements preserve the original visual direction without redistributing personal-use, trial, or non-commercial files. Every source, immutable revision, license, and substitution rationale is recorded in [`themes/FONT_SOURCES.md`](themes/FONT_SOURCES.md). Their `imagePrompt` values are deliberately blank with a `pending-user-supplied` status until the corresponding prompts are provided; the cover generator fails clearly instead of silently inheriting unrelated artwork direction.
+Set any ID as `book.json.style` to apply its complete palette, typography, and canonical image prompt:
+
+```json
+{
+  "style": "millimetre-mondwest"
+}
+```
+
+Use the same ID as `fontTheme` when you only want its typography. Every complete theme binds generated artwork to its active semantic colors and keeps subjects ordinary, physically coherent, and at normal scale so the medium supplies the personality without making future book imagery surreal.
+
+The redistributable replacements preserve each original pairing’s direction without bundling personal-use, trial, or non-commercial files. Every source, immutable revision, license, and substitution rationale is recorded in [`themes/FONT_SOURCES.md`](themes/FONT_SOURCES.md).
 
 For example, `{"style":"colbalt","fontTheme":"alumni"}` keeps the cobalt palette and cover-art language while using Alumni's Bricolage Grotesque/Fraunces typography. Custom `fontOverrides` use the same display/body/UI roles and must declare every local face and license.
 

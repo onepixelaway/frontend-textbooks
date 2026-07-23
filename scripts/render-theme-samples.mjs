@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import dribbblePairingThemes from "../themes/dribbble-pairings.mjs";
+import editorialThemes from "../themes/editorial-themes.mjs";
 import {
   buildThemeSamples,
   DEFAULT_THEME_SAMPLE_OUTPUT_DIRECTORY,
@@ -30,7 +30,7 @@ export async function renderThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPL
       if (message.type() === "error") consoleErrors.push(message.text());
     });
 
-    for (const theme of dribbblePairingThemes) {
+    for (const theme of editorialThemes) {
       const directory = resolve(built.outputDirectory, theme.id);
       const stagedDirectory = resolve(stageRoot, theme.id);
       await mkdir(stagedDirectory);
@@ -59,7 +59,7 @@ export async function renderThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPL
     }
   }
 
-  return { ...built, screenshotCount: dribbblePairingThemes.length * THEME_SAMPLE_PAGE_NAMES.length };
+  return { ...built, screenshotCount: editorialThemes.length * THEME_SAMPLE_PAGE_NAMES.length };
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";

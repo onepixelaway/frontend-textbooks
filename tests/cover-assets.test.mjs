@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 
 import { assertCoverAssetNotReused, coverFrameForConfig, inspectCoverBitmap, resolveRequiredCoverAsset } from "../scripts/lib/cover-assets.mjs";
-import { assertCoverGenerationReceiptFile, assertCoverImageRequestFile, createCoverGenerationReceipt, createCoverImageRequest } from "../scripts/lib/cover-image-request.mjs";
+import { assertCoverGenerationReceiptFile, assertCoverImageRequestFile, createCoverGenerationReceipt, createCoverImageRequest, themeImagePrompt } from "../scripts/lib/cover-image-request.mjs";
 import { coverDecision, pngBytes, writeTestPng } from "./helpers/fixture-assets.mjs";
 
 const temporaryDirectories = [];
@@ -48,18 +48,34 @@ test("a generated cover request uses the active theme's canonical template", asy
   assert.match(request.requestHash, /^[a-f0-9]{64}$/);
 });
 
-test("a theme awaiting its user-supplied image prompt fails with an actionable error", async () => {
+test("a theme without an image prompt fails with an actionable error", () => {
+  assert.throws(() => themeImagePrompt(
+    { id: "pending-theme", imagePrompt: null },
+    "A grounded subject",
+    { frame: { widthIn: 8.5, heightIn: 7.45 }, minimumPixels: { width: 1275, height: 1118 }, safeArea: "Keep the subject centered." },
+    { roles: {}, instruction: "Authoritative test palette." }
+  ), /Theme pending-theme has no canonical image-prompt template/u);
+});
+
+test("the Mazius theme compiles its reusable editorial prompt with the active palette", async () => {
   const paths = await fixture();
-  assert.throws(() => createCoverImageRequest({
+  const request = createCoverImageRequest({
     config: { title: "A Book", author: "Author", style: "mazius-libre", coverImage: "assets/cover.png", selectedCoverRoute: "photo" },
     plan: {
-      manuscriptHash: "d".repeat(64),
+      manuscriptHash: "e".repeat(64),
       theme: { id: "mazius-libre" },
       layout: { coverRoute: "photo" },
       visuals: { cover: coverDecision() }
     },
     outputDir: paths.outputDir
-  }), /Theme mazius-libre has no canonical image-prompt template/u);
+  });
+  assert.match(request.prompt, /child arranging layered paper paths/i);
+  assert.match(request.prompt, /grounded but enigmatic observational editorial scene/i);
+  assert.match(request.prompt, /normal scale/i);
+  assert.doesNotMatch(request.prompt, /dreamlike editorial scene/i);
+  assert.match(request.prompt, /#232323/u);
+  assert.match(request.prompt, /#E4FF5E/u);
+  assert.doesNotMatch(request.prompt, /\[SUBJECT\]|\[COLOR PALETTE\]|\[COVER ART CONSTRAINTS\]/u);
 });
 
 test("theme overrides replace the illustration palette and invalidate stale artwork requests", async () => {

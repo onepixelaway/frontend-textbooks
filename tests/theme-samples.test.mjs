@@ -18,6 +18,7 @@ const themeIds = [
   "sporting-agrandir",
   "millimetre-mondwest"
 ];
+const promptReadyThemeIds = new Set(themeIds);
 
 after(async () => Promise.all(outputDirectories.map((directory) => rm(directory, { recursive: true, force: true }))));
 
@@ -56,7 +57,21 @@ test("theme sample builder emits three offline report pages for every selected p
     assert.match(html, new RegExp(`themes/${theme.id}/fonts`, "u"));
     assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic/u);
     assert.equal(theme.pageCount, 3);
-    assert.equal(theme.imagePrompt, null);
+    if (promptReadyThemeIds.has(theme.id)) {
+      assert.ok(theme.imagePrompt?.template);
+      assert.equal(theme.promptExamples.length, 3);
+      assert.match(html, /class="report-page cover-page has-cover-art route-minimal"/u);
+      assert.match(html, /data-cover-route="minimal"/u);
+      assert.match(html, /class="plan-hero has-plan-art"/u);
+      assert.match(html, /class="plan-art"/u);
+      assert.match(html, new RegExp(theme.promptExamples[1].file.replace(".", "\\."), "u"));
+      for (const example of theme.promptExamples) {
+        assert.ok((await readFile(join(outputDirectory, theme.id, example.path))).length > 0);
+      }
+    } else {
+      assert.equal(theme.imagePrompt, null);
+      assert.deepEqual(theme.promptExamples, []);
+    }
   }
 
   const gallery = await readFile(join(outputDirectory, "index.html"), "utf8");

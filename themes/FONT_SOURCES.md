@@ -1,6 +1,6 @@
 # Font Sources and Pairing Provenance
 
-The five themes in `dribbble-pairings.mjs` adapt selected pairings and specimen palettes from [“8 expressive free font combos for your next design”](https://dribbble.com/stories/2020/06/10/free-font-combinations), written by Renee Fleck and curated and visually demonstrated by Davide Baratta.
+The five themes in `editorial-themes.mjs` adapt selected pairings and specimen palettes from [“8 expressive free font combos for your next design”](https://dribbble.com/stories/2020/06/10/free-font-combinations), written by Renee Fleck and curated and visually demonstrated by Davide Baratta.
 
 Only font files whose licenses permit redistribution are committed. Source revisions are immutable so the bundled bytes can be audited and reproduced. Google Fonts files use repository commit `00e726a90e0b9698971c37b88c35ef958965448b`.
 
