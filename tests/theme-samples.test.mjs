@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,13 @@ after(async () => Promise.all(outputDirectories.map((directory) => rm(directory,
 test("theme sample builder emits three offline report pages for every selected pairing", async () => {
   const outputDirectory = await mkdtemp(join(examplesDirectory, ".theme-gallery-test-"));
   outputDirectories.push(outputDirectory);
+  const staleDirectory = join(outputDirectory, "retired-theme");
+  await mkdir(staleDirectory);
+  await writeFile(join(staleDirectory, "index.html"), "stale gallery page");
+  const existingScreenshot = Buffer.from("existing sample screenshot");
+  const existingThemeDirectory = join(outputDirectory, themeIds[0]);
+  await mkdir(existingThemeDirectory);
+  await writeFile(join(existingThemeDirectory, "cover.png"), existingScreenshot);
 
   const result = await execFileAsync(process.execPath, [builder.pathname, "--output-dir", outputDirectory]);
   const manifest = JSON.parse(await readFile(join(outputDirectory, "manifest.json"), "utf8"));
@@ -33,6 +40,8 @@ test("theme sample builder emits three offline report pages for every selected p
   assert.deepEqual(manifest.themes.map(({ id }) => id), themeIds);
   assert.equal(manifest.report.title, "The Deliberate Life");
   assert.equal(manifest.report.author, "Tareq Ismail");
+  assert.equal((await readdir(outputDirectory)).includes("retired-theme"), false);
+  assert.deepEqual(await readFile(join(outputDirectory, themeIds[0], "cover.png")), existingScreenshot);
   assert.deepEqual(await readdir(outputDirectory).then((entries) => entries.filter((entry) => themeIds.includes(entry))), themeIds.toSorted());
 
   for (const theme of manifest.themes) {

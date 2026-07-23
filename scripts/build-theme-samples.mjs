@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { copyFile, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import dribbblePairingThemes from "../themes/dribbble-pairings.mjs";
+import dribbblePairingThemes, { DRIBBBLE_PAIRING_ARTICLE } from "../themes/dribbble-pairings.mjs";
 import { prepareThemeFonts } from "../themes/font-assets.mjs";
+import { publishGeneratedTargets } from "./lib/generated-publication.mjs";
 import { themeColors, themeFontStack } from "../themes/index.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 export const DEFAULT_THEME_SAMPLE_OUTPUT_DIRECTORY = join(repositoryRoot, "examples", "theme-gallery");
-const articleUrl = "https://dribbble.com/stories/2020/06/10/free-font-combinations";
+export const THEME_SAMPLE_PAGE_NAMES = Object.freeze(["cover", "control-audit", "agency-plan"]);
 const report = Object.freeze({
   title: "The Deliberate Life",
   subtitle: "A practical report on reclaiming time, attention, and agency",
@@ -50,6 +51,20 @@ function fontFaceCss(theme, sampleDirectory) {
   const fontDirectory = join(repositoryRoot, "themes", theme.id, "fonts");
   const sourcePrefix = JSON.stringify(`${webPath(relative(sampleDirectory, fontDirectory))}/`).slice(1, -1);
   return prepareThemeFonts(theme).css.replaceAll(`assets/fonts/${theme.id}/`, sourcePrefix);
+}
+
+async function preserveScreenshot(source, destination) {
+  let stat;
+  try {
+    stat = await lstat(source);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`Existing theme screenshot must be a regular file: ${source}`);
+  }
+  await copyFile(source, destination);
 }
 
 function themeCss(theme, sampleDirectory) {
@@ -402,9 +417,9 @@ function galleryHtml(themes) {
   </style>
 </head>
 <body>
-  <header><span class="kicker">${themes.length} themes · ${themes.length * 3} report pages</span><h1>Expressive type, built into the theme system.</h1><p>Every theme applies one pairing to the same fictional report, <em>${report.title}</em> by ${report.author}. Covers use typographic compositions while their image prompts remain intentionally blank for the user’s forthcoming direction.</p></header>
+  <header><span class="kicker">${themes.length} themes · ${themes.length * THEME_SAMPLE_PAGE_NAMES.length} report pages</span><h1>Expressive type, built into the theme system.</h1><p>Every theme applies one pairing to the same fictional report, <em>${report.title}</em> by ${report.author}. Covers use typographic compositions while their image prompts remain intentionally blank for the user’s forthcoming direction.</p></header>
   <main class="gallery">${cards}</main>
-  <footer>Pairings and specimen palettes inspired by <a href="${articleUrl}">“8 expressive free font combos for your next design”</a>, written by Renee Fleck and curated by Davide Baratta. Restricted source fonts use documented redistributable alternatives.</footer>
+  <footer>Pairings and specimen palettes inspired by <a href="${DRIBBBLE_PAIRING_ARTICLE.url}">“${DRIBBBLE_PAIRING_ARTICLE.title}”</a>, written by ${DRIBBBLE_PAIRING_ARTICLE.writer} and curated by ${DRIBBBLE_PAIRING_ARTICLE.curator}. Restricted source fonts use documented redistributable alternatives.</footer>
 </body>
 </html>
 `;
@@ -420,39 +435,68 @@ export function resolveThemeSampleOutputDirectory(arguments_) {
 
 export async function buildThemeSamples({ outputDirectory = DEFAULT_THEME_SAMPLE_OUTPUT_DIRECTORY } = {}) {
   const absoluteOutput = resolve(outputDirectory);
-  await mkdir(absoluteOutput, { recursive: true });
-
+  const outputParent = dirname(absoluteOutput);
+  const outputTarget = basename(absoluteOutput);
+  await mkdir(outputParent, { recursive: true });
+  const stageContainer = await mkdtemp(join(outputParent, ".theme-gallery-stage-"));
+  const stageRoot = join(stageContainer, "next");
+  const stagedOutput = join(stageRoot, outputTarget);
   const sampleThemes = dribbblePairingThemes.map((theme, index) => ({ ...theme, sampleIndex: index + 1 }));
-  const manifestThemes = [];
-  for (const theme of sampleThemes) {
-    const sampleDirectory = join(absoluteOutput, theme.id);
-    await mkdir(sampleDirectory, { recursive: true });
-    await writeFile(join(sampleDirectory, "index.html"), sampleHtml(theme, sampleDirectory));
-    manifestThemes.push({
-      id: theme.id,
-      name: theme.name,
-      sampleIndex: theme.sampleIndex,
-      pageCount: 3,
-      pages: ["cover", "control-audit", "agency-plan"],
-      originalPairing: theme.inspiration.originalPairing,
-      bundledPairing: theme.inspiration.bundledPairing,
-      substitutions: theme.inspiration.substitutions,
-      colors: themeColors(theme),
-      imagePrompt: theme.imagePrompt,
-      imagePromptStatus: theme.imagePromptStatus,
-      screenshots: ["cover.png", "control-audit.png", "agency-plan.png"]
-    });
+  try {
+    await mkdir(stagedOutput, { recursive: true });
+    const manifestThemes = [];
+    for (const theme of sampleThemes) {
+      const stagedSampleDirectory = join(stagedOutput, theme.id);
+      const publishedSampleDirectory = join(absoluteOutput, theme.id);
+      await mkdir(stagedSampleDirectory, { recursive: true });
+      await writeFile(join(stagedSampleDirectory, "index.html"), sampleHtml(theme, publishedSampleDirectory));
+      await Promise.all(THEME_SAMPLE_PAGE_NAMES.map((name) => preserveScreenshot(
+        join(publishedSampleDirectory, `${name}.png`),
+        join(stagedSampleDirectory, `${name}.png`)
+      )));
+      manifestThemes.push({
+        id: theme.id,
+        name: theme.name,
+        sampleIndex: theme.sampleIndex,
+        pageCount: THEME_SAMPLE_PAGE_NAMES.length,
+        pages: [...THEME_SAMPLE_PAGE_NAMES],
+        originalPairing: theme.inspiration.originalPairing,
+        bundledPairing: theme.inspiration.bundledPairing,
+        substitutions: theme.inspiration.substitutions,
+        colors: themeColors(theme),
+        imagePrompt: theme.imagePrompt,
+        imagePromptStatus: theme.imagePromptStatus,
+        screenshots: THEME_SAMPLE_PAGE_NAMES.map((name) => `${name}.png`)
+      });
+    }
+
+    await writeFile(join(stagedOutput, "index.html"), galleryHtml(sampleThemes));
+    await writeFile(join(stagedOutput, "manifest.json"), `${JSON.stringify({
+      schemaVersion: 1,
+      article: {
+        url: DRIBBBLE_PAIRING_ARTICLE.url,
+        writer: DRIBBBLE_PAIRING_ARTICLE.writer,
+        curator: DRIBBBLE_PAIRING_ARTICLE.curator
+      },
+      report,
+      themes: manifestThemes
+    }, null, 2)}\n`);
+    publishGeneratedTargets({ outputDir: outputParent, stageRoot, targets: [outputTarget] });
+  } finally {
+    try {
+      await rm(stageContainer, { recursive: true, force: true });
+    } catch (error) {
+      process.emitWarning(`Theme gallery cleanup could not remove ${stageContainer}: ${error.message}`, {
+        code: "THEME_GALLERY_CLEANUP_FAILED"
+      });
+    }
   }
 
-  await writeFile(join(absoluteOutput, "index.html"), galleryHtml(sampleThemes));
-  await writeFile(join(absoluteOutput, "manifest.json"), `${JSON.stringify({
-    schemaVersion: 1,
-    article: { url: articleUrl, writer: "Renee Fleck", curator: "Davide Baratta" },
-    report,
-    themes: manifestThemes
-  }, null, 2)}\n`);
-
-  return { outputDirectory: absoluteOutput, themeCount: manifestThemes.length, pageCount: manifestThemes.length * 3 };
+  return {
+    outputDirectory: absoluteOutput,
+    themeCount: sampleThemes.length,
+    pageCount: sampleThemes.length * THEME_SAMPLE_PAGE_NAMES.length
+  };
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";

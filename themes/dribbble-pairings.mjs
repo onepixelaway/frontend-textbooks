@@ -1,4 +1,9 @@
-const ARTICLE_URL = "https://dribbble.com/stories/2020/06/10/free-font-combinations";
+export const DRIBBBLE_PAIRING_ARTICLE = Object.freeze({
+  title: "8 expressive free font combos for your next design",
+  url: "https://dribbble.com/stories/2020/06/10/free-font-combinations",
+  writer: "Renee Fleck",
+  curator: "Davide Baratta"
+});
 const GOOGLE_FONTS_REF = "00e726a90e0b9698971c37b88c35ef958965448b";
 
 function role(family, fallback, weights) {
@@ -11,10 +16,10 @@ function role(family, fallback, weights) {
 
 function inspiration(originalPairing, bundledPairing, substitutions = []) {
   return {
-    articleTitle: "8 expressive free font combos for your next design",
-    articleUrl: ARTICLE_URL,
-    writer: "Renee Fleck",
-    curator: "Davide Baratta",
+    articleTitle: DRIBBBLE_PAIRING_ARTICLE.title,
+    articleUrl: DRIBBBLE_PAIRING_ARTICLE.url,
+    writer: DRIBBBLE_PAIRING_ARTICLE.writer,
+    curator: DRIBBBLE_PAIRING_ARTICLE.curator,
     originalPairing,
     bundledPairing,
     substitutions
